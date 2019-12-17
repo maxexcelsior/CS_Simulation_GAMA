@@ -11,7 +11,7 @@ model segregacionfPrecioDiv
 
 
 global{
-	
+	//COMMENT
 	float wgd_HS<- 0.0;
 	float wgd_uni<- -1;
 	float wgd_comm<- -0.1;
