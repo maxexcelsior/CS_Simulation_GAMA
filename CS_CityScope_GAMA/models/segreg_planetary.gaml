@@ -14,6 +14,11 @@ global{
 	map<string,int> possible_unitSizes<-["S"::1,"M"::2,"L"::3];
 	int happyUnitSizePeople<-0;
 	int happyNeighbourhoodPeople <- 0;
+	float crowded_perc <- 0.9;
+	float rent_incr <- 1.05;
+	float empty_perc <- 0.4;
+	float rent_decr <- 0.9;
+	bool changeRent <- false;
 	list<point> busStop_locations <- [{416.065842541361,872.4406645256535},{295.6297241536236,1539.974425847902},{117.57324879127151,1366.4780559606388},{844.7128639433781,1152.1258495633292},{1223.250124982041,794.9240374419919},{528.8729859709387,115.20351949292453},{303.3080137033162,61.469988319234204}];
 	
 	bool weatherImpact<-false;
@@ -23,12 +28,14 @@ global{
 	float meanRentnorm<-0.0;
 	//int supported_people<-5;	
 	float meanDiversityGlobal<-0.0;
+	float meanRentGlobal <- 0.0;
 	int movingPeople<-0;
 	float meanTimeToMainActivity;
 	map<string,float> people_per_Mobility_now; //proportion
 	list<point> FinalLocation<-[];
 	list<string> typeFinalLocation<-[];
 	list<float> meanDiversityRecord<-[];
+	list<float> meanRentRecord <- [];
 	list<int> peopleMovingRecord<-[];
 	list<int> happyUnitSizePeopleRecord <- [];
 	list<int> happyNeighbourhoodPeopleRecord <- [];
@@ -54,7 +61,7 @@ global{
 
 	
 	
-	int nb_people<-1500;
+	int nb_people<-15;
 	list<string> type_people<-["Undergraduate student", "Graduate student", "PhD", "Young Professional", "Mid-career Professional", "Executives", "Worker", "Retiree"];
 	//los operarios habra que ponerlos en algun amenity no en oficina
 	map<string,rgb> color_per_type<-["Undergraduate student"::rgb(0,255,255), "Graduate student"::#blue, "PhD"::#yellow, "Young Professional"::#white, "Mid-career Professional"::#green, "Executives"::rgb(102,0,102),"Worker"::rgb(128,128,0), "Retiree"::rgb(128,128,128)];	
@@ -422,9 +429,17 @@ global{
 	
 	reflex peopleMove{
 		movingPeople<-0;
+		changeRent <- false;
 		ask people{
 			do changeHouse;
 		}
+		if(changeRent = true){
+			ask building where(each.usage="R"){
+					rentPriceNorm<-normalise_rent();
+					do changeColorPrice;				
+			}
+		}
+		write changeRent;
 		do countHappyPeople;
 		do countMobility;
 	}
@@ -439,6 +454,7 @@ global{
 	reflex count{
 		peopleMovingRecord<<movingPeople;
 		meanDiversityRecord<<meanDiversityGlobal;
+		meanRentRecord << meanRentGlobal;
 		happyUnitSizePeopleRecord<<happyUnitSizePeople;
 		happyNeighbourhoodPeopleRecord<<happyNeighbourhoodPeople;
 		meanTimeRecord<<meanTimeToMainActivity;
@@ -565,11 +581,17 @@ species people{
 		int choice <- weighted_means_DM(cands,criteria_WM);
 		
 		if (choice=0){ 
+			bool rentChange <- false;
 			living_place.vacant<-living_place.vacant+1;
 			possibleMoveBuilding.vacant<-possibleMoveBuilding.vacant-1;
 			ask living_place{
 				do calculateDiversityBuilding;
 			}
+			//low demand --> rent decrease. Only active when nb_people is really high. Otherwise doesn't make sense
+			/***if (living_place.vacant>int(empty_perc*living_place.supported_people)){
+				living_place.rentPriceabs <- living_place.rentPriceabs*rent_decr;
+				rentChange <- true;
+			}***/
 			ask possibleMoveBuilding{
 				do calculateDiversityBuilding;
 				ask myCity{
@@ -583,6 +605,14 @@ species people{
 			living_place<-possibleMoveBuilding;
 			priorHouse<<living_place;
 			location<-any_location_in(living_place);
+			//high demand --> rent increase
+			if (living_place.vacant<int((1-crowded_perc)*living_place.supported_people)){
+				write living_place.vacant;
+				write int((1-crowded_perc)*living_place.supported_people);
+				write living_place.name;
+				living_place.rentPriceabs <- living_place.rentPriceabs*rent_incr;
+				changeRent <- true;
+			}
 			movingPeople<-movingPeople+1;		
 			unitSizeWeight<-possibleUnitSizeWeight;
 			actualUnitSize<-living_place.scale;
@@ -656,8 +686,15 @@ species city{
 		meandiver<-mean(building where(each.usage="R" and each.vacant!=each.supported_people) collect each.diversity);
 		//meandiver<-geometric_mean(building where(each.usage="R" and each.vacant!=each.supported_people) collect each.diversity);
 		meanDiversityGlobal<-meandiver;
+		meanRentGlobal <- meandiver;
 	}
 }
+
+/***
+species planetary_city parent:city{
+	float dist_myCity;
+	
+}***/
 
 species building{
 	city myCity;
@@ -881,17 +918,22 @@ experiment visual type:gui{
 		}
 	
 			
-		display Charts {			
-			chart "MovingPeople" type: series background: #white position:{0,0} size:{1.0,0.25}{
+		display Charts_1 {			
+			chart "MovingPeople" type: series background: #white position:{0,0} size:{1.0,0.3}{
 				data "Moving people in myCity" value:movingPeople color:#blue;
 			}
-			chart "Mean diversity evolution" type: series background:#white position:{0,0.25} size:{1.0,0.25}{
+			chart "Mean diversity evolution" type: series background:#white position:{0,0.3} size:{1.0,0.3}{
 				data "Mean diversity in myCity" value: meanDiversityGlobal color: #green;
 			}
-			chart "Number of people happy with their UnitSize" type:series background: #white position:{0,0.5} size:{1.0,0.25}{
+			chart "Mean Rent evolution" type: series background: #white position:{0,0.6} size:{1.0,0.3}{
+				data "Mean rent in myCity" value: meanRentGlobal color: #black;
+			}
+		}
+		display Charts_2{
+			chart "Number of people happy with their UnitSize" type:series background: #white position:{0,0} size:{1.0,0.5}{
 				data "Happy unitSize" value: happyUnitSizePeople color: #red;
 			}
-			chart "Number of people happy with their Neighbourhood" type: series background:#white position: {0,0.75} size:{1.0,0.25}{
+			chart "Number of people happy with their Neighbourhood" type: series background:#white position: {0,0.5} size:{1.0,0.5}{
 				data "Happy Neighbourhood" value: happyNeighbourhoodPeople color: #orange;
 			}
 				
@@ -949,7 +991,7 @@ experiment exploration type: batch keep_seed: true until:(cycle>200){
 		
 	int num<-0;	
 	reflex save_results_explo{
-		save[int(self), divacc_list, peopleMovingRecord, meanDiversityRecord] type:csv to:"../results/results"+ num +".csv" rewrite: true header:true;
+		save[int(self), divacc_list, peopleMovingRecord, meanDiversityRecord, meanRentRecord] type:csv to:"../results/results"+ num +".csv" rewrite: true header:true;
 		save[int(self), FinalLocation, typeFinalLocation] to:"../results/FinalLocation" + num +".csv" type:"csv" rewrite:true header:true;		
 		num<-num+1;
 	}
