@@ -1,15 +1,16 @@
 /***
-* Name: segregplanetary
+* Name: segregcommuting
 * Author: 
 * Description: 
 * Tags: Tag1, Tag2, TagN
 * en que uds esta distance en evaluate_main_trip¿?¿? luego al normalizar no pasa nada, pero nos interesa compararlo con renta por lo que valor abs 
+* (supongo dam)
 * en que uds esta el speed¿?¿? la medida de distancia/m
 * no se si tiene mucho sentido sumar commuting cost respecto a precio ref de $1500 y las rentas normalizadas
 * ya tengo para cada persona a cuanto tiempo y distancia le queda cada planetary_city. De alguna manera ponderarlo y compararlo con el building de move
 ***/
 
-model segregplanetary
+model segregcommuting
 
 global{
 	int totalSupportedPeople<-0;
@@ -167,7 +168,6 @@ global{
 				has_bus <- planetary_matrix[2,i];
 				has_T <- planetary_matrix[3,i];
 				meanRent <- planetary_matrix[4,i];
-				meanRent <- meanRent + 1; //para que no estén en negativo
 				location_x <- planetary_matrix[5,i];
 				location_y <- planetary_matrix[6,i];
 				location <- {location_x,location_y};
@@ -179,16 +179,6 @@ global{
 					possible_transport << "T"; 
 				}
 				list_planetary_cities << self;
-				create sat_building{
-					myCity <- list_planetary_cities[i];
-					rentPriceNorm <- list_planetary_cities[i].meanRent;
-					diversityNorm <- 0.5;
-					neighbourhood <- list_planetary_cities[i].name;
-					location <- list_planetary_cities[i].location;
-					satellite <- true;
-					list_planetary_cities[i].planetary_building <- self;
-				}
-				planetary_building <- list_planetary_cities[i].planetary_building;
 			}			
 		}
 		//write list_planetary_cities;
@@ -206,8 +196,7 @@ global{
 			else{
 				supported_people<-0;
 			}
-			vacant<-supported_people;
-			satellite <- false;	
+			vacant<-supported_people;	
 		}
 	}
 	
@@ -396,21 +385,9 @@ global{
 			CommutingCost <- extract_list[1];
 			distance_main_activity <- extract_list[2];
 			mobility_mode_main_activity<-mobilityAndTime.keys[0];
-			map_all_planets_transport <- calculate_planetary_transport();
-			map_all_planets_features <- calculate_planetary_features();
-			loop i from: 0 to: length(list_planetary_cities) - 1 {
-				list extract_features_list <- map_all_planets_features[map_all_planets_features.keys[i]];
-				map<string,list<float>> extract_transport_mode_map <- map_all_planets_transport[map_all_planets_transport.keys[i]];
-				list<float> extract_transport_mode_list <- extract_transport_mode_map[extract_transport_mode_map.keys[0]];
-				float possiblePlanetaryLivingCost <- extract_features_list[0];
-				float possiblePlanetaryCommutingCost <- extract_transport_mode_list[1];
-				float possiblePlanetaryDiversity <- extract_features_list[3];
-				float possiblePlanetaryUnitSizeWeight <- calculate_unitSizeWeight(extract_features_list[1]);
-				float possiblePlanetaryPatternWeight <- calculate_patternWeight(extract_features_list[2]);
-				float possiblePlanetaryTime <- extract_transport_mode_list[0];
-				list<float> possiblePlanetaryCand <- [possiblePlanetaryLivingCost + possiblePlanetaryCommutingCost, possiblePlanetaryDiversity, possiblePlanetaryUnitSizeWeight, possiblePlanetaryPatternWeight, possiblePlanetaryTime];
-				map_planets_move_cand[list_planetary_cities[i]] <- possiblePlanetaryCand;
-			}			
+			map<string,map<string,list<float>>> map_all_planets_people;
+			map_all_planets_people <- calculate_planetary();
+			
 		}
 	}
 	
@@ -548,19 +525,6 @@ global{
 		ask people{
 			do changeHouse;
 		}
-		ask one_of(building where (each.satellite = false)) {
-			ask myCity{
-				do updateCityParams;
-			}
-		}
-		ask building where(each.satellite = false){
-			do normaliseDiversityBuilding;
-		}
-		ask one_of(building where(each.satellite = false)){
-			ask myCity{
-				do updateMeanDiver;
-			}
-		}
 		do countRent;
 		do countHappyPeople;
 		do countMobility;
@@ -608,57 +572,37 @@ species people{
 	float distance_main_activity;
 	float CommutingCost;
 	float payingRent;
-	map<string,map<string,list<float>>> map_all_planets_transport;
-	map<string,list> map_all_planets_features; //other features apart from transportation
-	map<string,list<float>> map_planets_move_cand;
 	
 	aspect default{
 		draw circle(10) color:color;
 	}
 	
-	map<string,map<string,list<float>>> calculate_planetary_transport {
+	map<string,map<string,list<float>>> calculate_planetary {
 		map<string,map<string,list<float>>> map_planet_transport;
 		map<string,list<float>> each_planet_transport;
 		loop i from: 0 to: length(list_planetary_cities) - 1 {
-			each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place, list_planetary_cities[i].dist);
-			//write each_planet_transport;
+			each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place);
 			add each_planet_transport at:list_planetary_cities[i] to: map_planet_transport;
 		}
 		//write map_planet_transport;	
 		return map_planet_transport;	
 	}
 	
-	map<string,list> calculate_planetary_features{
-		map<string,list> map_planet_feat;
-		loop i from: 0 to: length(list_planetary_cities) - 1{
-			list each_planet_feat <- [];
-			each_planet_feat << list_planetary_cities[i].meanRent;
-			each_planet_feat << unitSize_list[type]; //they will always be able to find their preferred unitSize
-			each_planet_feat << list_planetary_cities[i].name; //they will never be fine with the neighbourhood
-			each_planet_feat << list_planetary_cities[i].planetary_building.diversityNorm; //normalisedDiversity;
-			map_planet_feat[list_planetary_cities[i]] <- each_planet_feat;
-		} 
-		return map_planet_feat;
-	}
-	
-	map<string,list<float>> evaluate_main_trip(point origin_location,building destination, float distance_original <- nil){
+	map<string,list<float>> evaluate_main_trip(point origin_location,building destination){
 		list<list> candidates;
 		list<float> commuting_cost_list;
 		list<float> distance_list;
 		loop mode over:possibleMobModes{
 			list<float> characteristic<- charact_per_mobility[mode];
-			list<float> cand;	
-			float distance <- 0.0;		
-			if(distance_original = nil){
+			list<float> cand;
+			float distance<-0.0;
+			
 				using topology(graph_per_mobility[mode]){
 					distance <- distance_to(origin_location,destination.location);
 				}
-			}
-			else{
-				distance <- distance_original;
-			}
+			
 			cand<<characteristic[0] + characteristic[1]*distance;  //length unit meters
-			commuting_cost_list << (characteristic[0] + characteristic[1]*distance/1000)/reference_rent*days_per_month*2; //price with respect to a reference rent (*2 because we have rentPrices [0,2]
+			commuting_cost_list << (characteristic[0] + characteristic[1]*distance/1000)/reference_rent*days_per_month; //price with respect to a reference rent
 			distance_list << distance;
 			cand<<characteristic[2]#mn + distance/speed_per_mobility[mode];
 			cand<<characteristic[4];
@@ -666,9 +610,6 @@ species people{
 			cand<<characteristic[5]*(weatherImpact?(1.0 + weather_of_day*weather_coeff_per_mobility[mode]):1.0);
 			add cand to: candidates;
 		}
-		//write candidates;
-		//write possibleMobModes;
-		//write commuting_cost_list;
 		//normalisation
 		list<float> max_values;
 		loop i from:0 to: length(candidates[0])-1{
@@ -728,7 +669,7 @@ species people{
 		exploredHouse<<possibleMoveBuilding;
 		float possibleLivingCost<-possibleMoveBuilding.rentPriceNorm;
 		float living_cost <- living_place.rentPriceNorm;
-		float possibleDiversity <- possibleMoveBuilding.diversityNorm;
+		float possibleDiversity <- possibleMoveBuilding.diversity;
 		string possibleUnitSize<-possibleMoveBuilding.scale;		
 		float possibleUnitSizeWeight <- calculate_unitSizeWeight(possibleUnitSize);
 		string possibleNeighbourhood <- possibleMoveBuilding.neighbourhood;
@@ -740,31 +681,36 @@ species people{
 		string possibleMobility <- possibleTimeAndMob.keys[0];
 		float possibleDistance <- possible_extract_list[2];
 		list<float> crit<- [priceImp_list[type],divacc_list[type],unitSizeWeight_list[type],patternWeight_list[type],time_importance_per_type[type]];
-		list<list> cands<-[[possibleLivingCost+possibleCommutingCost,possibleDiversity,possibleUnitSizeWeight,possiblePatternWeight, possibleTime],[living_cost + CommutingCost,living_place.diversityNorm,unitSizeWeight,actualPatternWeight, time_main_activity]];
-		loop i from: 0 to: length(list_planetary_cities) - 1{
-			list<float> possiblePlanetaryCand <- map_planets_move_cand[map_planets_move_cand.keys[i]];
-			cands << possiblePlanetaryCand;
-		}
-		//write cands;
+		list<list> cands<-[[possibleLivingCost+possibleCommutingCost,possibleDiversity,possibleUnitSizeWeight,possiblePatternWeight, possibleTime],[living_cost + CommutingCost,living_place.diversity,unitSizeWeight,actualPatternWeight, time_main_activity]];
+		
 		list<map> criteria_WM<-[];
 		loop i from:0 to: length(crit)-1{
 			criteria_WM<<["name"::"crit"+i, "weight"::crit[i]];
 		}		
-		//write criteria_WM;
+			
 		int choice <- weighted_means_DM(cands,criteria_WM);
 		
-		if (choice = 0){ 
+		if (choice=0){ 
 			living_place.vacant<-living_place.vacant+1;
 			building noLonger_living_place <- living_place;
 			possibleMoveBuilding.vacant<-possibleMoveBuilding.vacant-1;
 			living_place <- possibleMoveBuilding;
 			ask noLonger_living_place{
-				if(satellite = false){
-					do calculateDiversityBuilding;
-				}
+				do calculateDiversityBuilding;
 			}
 			ask living_place{
 				do calculateDiversityBuilding;
+				ask myCity{
+					do updateCityParams;
+				}
+			}
+			ask building{
+				do normaliseDiversityBuilding;
+			}
+			ask living_place{
+				ask myCity{
+					do updateMeanDiver;
+				}
 			}
 			priorHouse<<living_place;
 			location<-any_location_in(living_place);
@@ -779,53 +725,12 @@ species people{
 			CommutingCost <- possibleCommutingCost;
 			
 		}
-		else if (choice != 0 and choice!= 1){
-			if (living_place != list_planetary_cities[choice - 2].planetary_building){
-				living_place.vacant<-living_place.vacant + 1;
-				building nolonger_living_place <- living_place;
-				//write nolonger_living_place;
-				living_place <- list_planetary_cities[choice - 2].planetary_building;
-				happyUnitSize <- 1; //suponemos que en planetary_city siempre son capaces de encontrar el unitSize que quieren
-				//write living_place;
-				location <- any_location_in(living_place);
-				ask nolonger_living_place{
-					do calculateDiversityBuilding; //que pasara si el planetario ya no es living place¿? no pasará nunca por la cond y porque nunca pasará de un planetario al otro
-				}
-				movingPeople <- movingPeople + 1;
-				list<float> extract_cand_list <- map_planets_move_cand[map_planets_move_cand.keys[choice - 2]];
-				//write extract_cand_list;
-				list extract_features_list <- map_all_planets_features[map_planets_move_cand.keys[choice - 2]];
-				//write extract_features_list;
-				map<string,list<float>> extract_transport_map <- map_all_planets_transport[map_all_planets_transport.keys[choice - 2]];
-				//write extract_transport_map;
-				list extract_transport_list <- extract_transport_map[extract_transport_map.keys[0]];
-				//write extract_transport_list;
-				unitSizeWeight <- extract_cand_list[2];
-				//write unitSizeWeight;
-				actualUnitSize <- extract_features_list[1];
-				//write actualUnitSize;
-				actualPatternWeight <- extract_cand_list[3];
-				//write actualPatternWeight;
-				actualNeighbourhood <- extract_features_list[2];
-				//write actualNeighbourhood;
-				time_main_activity <- extract_cand_list[4];
-				//write time_main_activity;
-				distance_main_activity <- extract_transport_list[2];
-				//write distance_main_activity;
-				mobility_mode_main_activity <- extract_transport_map.keys[0];
-				//write mobility_mode_main_activity;
-				CommutingCost <- extract_features_list[1];		
-				//write CommutingCost;						
-			}
-		}
 		
-		if (living_place.satellite = false){
-			if (living_place.scale=unitSize_list[type]){
-				happyUnitSize<-1;	
-			}
-			else{
-				happyUnitSize<-0;
-			}
+		if (living_place.scale=unitSize_list[type]){
+			happyUnitSize<-1;	
+		}
+		else{
+			happyUnitSize<-0;
 		}
 		if(living_place.neighbourhood=pattern_list[type]){
 			happyNeighbourhood <- 1;
@@ -834,7 +739,7 @@ species people{
 			happyNeighbourhood <- 0;
 		}
 	}
-		
+	
 	float calculate_patternWeight(string possibleNeighbourhood){
 		float possible_patternWeight;
 		if(possibleNeighbourhood!=pattern_list[type]){
@@ -875,14 +780,14 @@ species city{
 	float meanCommutingCost;
 	
 	action updateCityParams{
-		maxRent<- max(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
-		minRent <- min(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
-		meanRent<- mean(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
+		maxRent<- max(building where (each.usage="R") collect each.rentPriceabs);
+		minRent <- min(building where (each.usage="R") collect each.rentPriceabs);
+		meanRent<- mean(building where (each.usage="R") collect each.rentPriceabs);
 	
 		meanRentnorm<-(meanRent-minRent)/(maxRent-minRent);
 		
-		maxdiver<-max(building where (each.usage = "R" and each.myCity = self) collect each.diversity);
-		mindiver<-min(building where (each.usage = "R" and each.myCity = self) collect each.diversity);
+		maxdiver<-max(building where (each.usage = "R") collect each.diversity);
+		mindiver<-min(building where (each.usage = "R") collect each.diversity);
 		meanCommutingCost <- mean(people collect each.CommutingCost);
 		meanCommutingCostGlobal <- meanCommutingCost;
 		
@@ -892,7 +797,7 @@ species city{
 	}
 	
 	action updateMeanDiver{
-		meandiver<-mean(building where(each.usage="R" and each.vacant!=each.supported_people and each.myCity = self) collect each.diversityNorm);
+		meandiver<-mean(building where(each.usage="R" and each.vacant!=each.supported_people) collect each.diversityNorm);
 		meanDiversityGlobal<-meandiver;
 	}
 }
@@ -904,7 +809,6 @@ species planetary_city parent: city {
 	list<string> possible_transport;
 	float location_x;
 	float location_y;
-	building planetary_building;
 	
 	aspect basic{
 		draw square(20#px) color: rgb(220,220,220,125);
@@ -931,7 +835,6 @@ species building{
 	string type; //building or ruins or whatever
 	int supported_people; //how many people can live in this building
 	string neighbourhood;	
-	bool satellite;
 	
 	list<float> calculateDistances{
 		list<float> dist_list <- [];
@@ -989,7 +892,6 @@ species building{
 			rentPriceNorm_gen <- 0.0;
 		}
 		
-		rentPriceNorm_gen <- rentPriceNorm_gen + 1; //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
 		return rentPriceNorm_gen;
 	}
 	
@@ -1035,7 +937,7 @@ species building{
 	
 	action changeColorPrice{
 		if (usage="R"){
-			float colorPriceValue<-255*(rentPriceNorm - 1);
+			float colorPriceValue<-255*rentPriceNorm;
 			colorPrice<-rgb(max([0,colorPriceValue]),min([255,255-colorPriceValue]),0,125);
 		}
 		
@@ -1049,10 +951,6 @@ species building{
 	aspect default{
 		draw shape color: rgb(50,50,50,125);
 	}
-	
-}
-
-species sat_building parent:building{
 	
 }
 

@@ -1,27 +1,49 @@
 /***
-* Name: segregplanetary
+* Name: segregcommutinglong
 * Author: 
 * Description: 
 * Tags: Tag1, Tag2, TagN
 * en que uds esta distance en evaluate_main_trip¿?¿? luego al normalizar no pasa nada, pero nos interesa compararlo con renta por lo que valor abs 
+* (supongo dam)
 * en que uds esta el speed¿?¿? la medida de distancia/m
 * no se si tiene mucho sentido sumar commuting cost respecto a precio ref de $1500 y las rentas normalizadas
 * ya tengo para cada persona a cuanto tiempo y distancia le queda cada planetary_city. De alguna manera ponderarlo y compararlo con el building de move
 ***/
 
-model segregplanetary
+model segregcommutinglong
 
 global{
 	int totalSupportedPeople<-0;
 	map<string,int> possible_unitSizes<-["S"::1,"M"::2,"L"::3];
 	float happyUnitSizePeople;
-	map<string,float> happyUnitSize_perProfile;
+	float happyUnitSizeUndergrad;
+	float happyUnitSizeGraduate;
+	float happyUnitSizePhD;
+	float happyUnitSizeYoungProfessional;
+	float happyUnitSizeMidCareerProfessional;
+	float happyUnitSizeExecutives;
+	float happyUnitSizeRetiree;
+	float happyUnitSizeWorker;
 	float happyNeighbourhoodPeople;
-	map<string,float> happyNeighbourhood_perProfile;
+	float happyNeighbourhoodUndergrad;
+	float happyNeighbourhoodGraduate;
+	float happyNeighbourhoodPhD;
+	float happyNeighbourhoodYoungProfessional;
+	float happyNeighbourhoodMidCareerProfessional;
+	float happyNeighbourhoodExecutives;
+	float happyNeighbourhoodRetiree;
+	float happyNeighbourhoodWorker;
 	float meanRentPeople;
-	map<string,float> meanRent_perProfile;
+	float meanRentUndergrad;
+	float meanRentGraduate;
+	float meanRentPhD;
+	float meanRentYoungProfessional;
+	float meanRentMidCareerProfessional;
+	float meanRentExecutives;
+	float meanRentWorker;
+	float meanRentRetiree;
 	list<point> busStop_locations <- [{416.065842541361,872.4406645256535},{295.6297241536236,1539.974425847902},{117.57324879127151,1366.4780559606388},{844.7128639433781,1152.1258495633292},{1223.250124982041,794.9240374419919},{528.8729859709387,115.20351949292453},{303.3080137033162,61.469988319234204}];
-	int reference_rent <- 1500; //se calculará el commuting cost en porcentaje respecto a este precio de referencia. Cuando tenga precios, será el menor de todos.
+	int reference_rent <- 1500; //se calculará el commuting cost en porcentaje respecto a este precio de referencia
 	int days_per_month <- 20; //dias laborales por mes
 	list<planetary_city> list_planetary_cities <- [];
 	
@@ -34,9 +56,23 @@ global{
 	float meanDiversityGlobal<-0.0;
 	int movingPeople<-0;
 	float meanTimeToMainActivity;
-	map<string,float> meanTimeToMainActivity_perProfile;
+	float meanTimeToMainActivityUndergrad;
+	float meanTimeToMainActivityGraduate;
+	float meanTimeToMainActivityPhD;
+	float meanTimeToMainActivityYoungProfessional;
+	float meanTimeToMainActivityMidCareerProfessional;
+	float meanTimeToMainActivityExecutives;
+	float meanTimeToMainActivityWorker;
+	float meanTimeToMainActivityRetiree;
 	float meanDistanceToMainActivity;
-	map<string,float> meanDistanceToMainActivity_perProfile;
+	float meanDistanceToMainActivityUndergrad;
+	float meanDistanceToMainActivityGraduate;
+	float meanDistanceToMainActivityPhD;
+	float meanDistanceToMainActivityYoungProfessional;
+	float meanDistanceToMainActivityMidCareerProfessional;
+	float meanDistanceToMainActivityExecutives;
+	float meanDistanceToMainActivityWorker;
+	float meanDistanceToMainActivityRetiree;
 	map<string,float> people_per_Mobility_now; //proportion
 	list<point> FinalLocation<-[];
 	list<string> typeFinalLocation<-[];
@@ -66,10 +102,31 @@ global{
 	map<road,float> congestion_map;  
 	list<string> allPossibleMobilityModes<-["walking","car","bike","bus"];
 	map<string,int> nPeople_per_mobility;
-	map<string,map<string,float>> propPeople_per_mobility_type <- map([]);
-	map<string,int> nPeople_perProfile;
+	map<string,float> propPeople_per_mobility_Undergrad;
+	map<string,float> propPeople_per_mobility_Graduate;
+	map<string,float> propPeople_per_mobility_PhD;
+	map<string,float> propPeople_per_mobility_YoungProfessional;
+	map<string,float> propPeople_per_mobility_MidCareerProfessional;
+	map<string,float> propPeople_per_mobility_Executives;
+	map<string,float> propPeople_per_mobility_Worker;
+	map<string,float> propPeople_per_mobility_Retiree;
+	int nPeopleUndergradTotal;
+	int nPeopleGraduateTotal;
+	int nPeoplePhDTotal;
+	int nPeopleYoungProfessionalTotal;
+	int nPeopleMidCareerProfessionalTotal;
+	int nPeopleExecutivesTotal;
+	int nPeopleWorkerTotal;
+	int nPeopleRetireeTotal;
 	float meanCommutingCostGlobal;
-	map<string,float> meanCommutingCost_perProfile;
+	float meanCommutingCostUndergrad;
+	float meanCommutingCostGraduate;
+	float meanCommutingCostPhD;
+	float meanCommutingCostYoungProfessional;
+	float meanCommutingCostMidCareerProfessional;
+	float meanCommutingCostExecutives;
+	float meanCommutingCostRetiree;
+	float meanCommutingCostWorker;
 	
 	
 	int nb_people<-1500;
@@ -121,8 +178,6 @@ global{
 		do createPopulation;
 		do countPopulation;
 		do initcalculateDiversityBuilding;
-		do countRent;
-		do countHappyPeople;
 		do countMobility;		
 	}
 	
@@ -167,7 +222,6 @@ global{
 				has_bus <- planetary_matrix[2,i];
 				has_T <- planetary_matrix[3,i];
 				meanRent <- planetary_matrix[4,i];
-				meanRent <- meanRent + 1; //para que no estén en negativo
 				location_x <- planetary_matrix[5,i];
 				location_y <- planetary_matrix[6,i];
 				location <- {location_x,location_y};
@@ -179,16 +233,6 @@ global{
 					possible_transport << "T"; 
 				}
 				list_planetary_cities << self;
-				create sat_building{
-					myCity <- list_planetary_cities[i];
-					rentPriceNorm <- list_planetary_cities[i].meanRent;
-					diversityNorm <- 0.5;
-					neighbourhood <- list_planetary_cities[i].name;
-					location <- list_planetary_cities[i].location;
-					satellite <- true;
-					list_planetary_cities[i].planetary_building <- self;
-				}
-				planetary_building <- list_planetary_cities[i].planetary_building;
 			}			
 		}
 		//write list_planetary_cities;
@@ -206,8 +250,7 @@ global{
 			else{
 				supported_people<-0;
 			}
-			vacant<-supported_people;
-			satellite <- false;	
+			vacant<-supported_people;	
 		}
 	}
 	
@@ -396,71 +439,100 @@ global{
 			CommutingCost <- extract_list[1];
 			distance_main_activity <- extract_list[2];
 			mobility_mode_main_activity<-mobilityAndTime.keys[0];
-			map_all_planets_transport <- calculate_planetary_transport();
-			map_all_planets_features <- calculate_planetary_features();
-			loop i from: 0 to: length(list_planetary_cities) - 1 {
-				list extract_features_list <- map_all_planets_features[map_all_planets_features.keys[i]];
-				map<string,list<float>> extract_transport_mode_map <- map_all_planets_transport[map_all_planets_transport.keys[i]];
-				list<float> extract_transport_mode_list <- extract_transport_mode_map[extract_transport_mode_map.keys[0]];
-				float possiblePlanetaryLivingCost <- extract_features_list[0];
-				float possiblePlanetaryCommutingCost <- extract_transport_mode_list[1];
-				float possiblePlanetaryDiversity <- extract_features_list[3];
-				float possiblePlanetaryUnitSizeWeight <- calculate_unitSizeWeight(extract_features_list[1]);
-				float possiblePlanetaryPatternWeight <- calculate_patternWeight(extract_features_list[2]);
-				float possiblePlanetaryTime <- extract_transport_mode_list[0];
-				list<float> possiblePlanetaryCand <- [possiblePlanetaryLivingCost + possiblePlanetaryCommutingCost, possiblePlanetaryDiversity, possiblePlanetaryUnitSizeWeight, possiblePlanetaryPatternWeight, possiblePlanetaryTime];
-				map_planets_move_cand[list_planetary_cities[i]] <- possiblePlanetaryCand;
-			}			
+			map<string,map<string,list<float>>> map_all_planets_people;
+			map_all_planets_people <- calculate_planetary();
+			
 		}
 	}
 	
 	action countPopulation{
-		loop i from: 0 to: length(type_people)-1 {
-			nPeople_perProfile[type_people[i]] <- people count(each.type = type_people[i]);
-		}
+		nPeopleUndergradTotal <- people count(each.type = "Undergraduate student");
+		nPeopleGraduateTotal <- people count(each.type = "Graduate student"); 
+		nPeoplePhDTotal <- people count(each.type = "PhD");
+		nPeopleYoungProfessionalTotal <- people count(each.type = "Young Professional");
+		nPeopleMidCareerProfessionalTotal <- people count(each.type = "Mid-career Professional");
+		nPeopleExecutivesTotal <- people count(each.type = "Executives");
+		nPeopleWorkerTotal <- people count(each.type = "Worker");
+		nPeopleRetireeTotal <- people count(each.type = "Retiree");
 	}
 	
 	action countRent{
 		meanRentPeople <- mean(people collect each.living_place.rentPriceNorm);
-		loop i from: 0 to: length(type_people) -1 {
-			meanRent_perProfile[type_people[i]] <- mean(people where(each.type = type_people[i]) collect each.living_place.rentPriceNorm);
-		}
+		meanRentUndergrad <- mean(people where(each.type = "Undergraduate student") collect each.living_place.rentPriceNorm);
+		meanRentGraduate <- mean(people where(each.type = "Graduate student") collect each.living_place.rentPriceNorm);
+		meanRentPhD <- mean(people where(each.type = "PhD") collect each.living_place.rentPriceNorm);
+		meanRentYoungProfessional <- mean(people where(each.type = "Young Professional") collect each.living_place.rentPriceNorm);
+		meanRentMidCareerProfessional <- mean(people where(each.type = "Mid-career Professional") collect each.living_place.rentPriceNorm);
+		meanRentExecutives <- mean(people where(each.type = "Executives") collect each.living_place.rentPriceNorm);
+		meanRentWorker <- mean(people where(each.type = "Worker") collect each.living_place.rentPriceNorm);
+		meanRentRetiree <- mean(people where(each.type="Retiree") collect each.living_place.rentPriceNorm);
 	}
 	
 	action countHappyPeople{
 		happyUnitSizePeople<-(people count(each.happyUnitSize=1))/nb_people;
-		happyNeighbourhoodPeople <- (people count(each.happyNeighbourhood=1))/nb_people;
+		happyUnitSizeUndergrad <- (people where(each.type = "Undergraduate student") count(each.happyUnitSize=1))/nPeopleUndergradTotal;
+		happyUnitSizeGraduate <- (people where(each.type = "Graduate student") count(each.happyUnitSize=1))/nPeopleGraduateTotal;
+		happyUnitSizePhD <- (people where(each.type = "PhD") count(each.happyUnitSize=1))/nPeoplePhDTotal;
+		happyUnitSizeYoungProfessional <- (people where(each.type = "Young Professional") count(each.happyUnitSize=1))/nPeopleYoungProfessionalTotal;
+		happyUnitSizeMidCareerProfessional <- (people where(each.type = "Mid-career Professional") count(each.happyUnitSize=1))/nPeopleMidCareerProfessionalTotal;
+		happyUnitSizeExecutives <- (people where(each.type = "Executives") count(each.happyUnitSize=1))/nPeopleExecutivesTotal;
+		happyUnitSizeWorker <- (people where(each.type = "Worker") count(each.happyUnitSize=1))/nPeopleWorkerTotal;
+		happyUnitSizeRetiree <- (people where(each.type = "Retiree") count(each.happyUnitSize=1))/nPeopleRetireeTotal;
 		
-		loop i from: 0 to: length(type_people) -1 {
-			happyUnitSize_perProfile[type_people[i]] <- (people where(each.type = type_people[i]) count(each.happyUnitSize = 1))/nPeople_perProfile[type_people[i]];
-			happyNeighbourhood_perProfile[type_people[i]] <- (people where(each.type = type_people[i]) count(each.happyNeighbourhood =  1))/nPeople_perProfile[type_people[i]];
-		}
+		happyNeighbourhoodPeople <- (people count(each.happyNeighbourhood=1))/nb_people;
+		happyNeighbourhoodUndergrad <- (people where(each.type = "Undergraduate student") count(each.happyNeighbourhood=1))/nPeopleUndergradTotal;
+		happyNeighbourhoodGraduate <- (people where(each.type = "Graduate student") count(each.happyNeighbourhood=1))/nPeopleGraduateTotal;
+		happyNeighbourhoodPhD <- (people where(each.type = "PhD") count(each.happyNeighbourhood=1))/nPeoplePhDTotal;
+		happyNeighbourhoodYoungProfessional <- (people where(each.type = "Young Professional") count(each.happyNeighbourhood=1))/nPeopleYoungProfessionalTotal;
+		happyNeighbourhoodMidCareerProfessional <- (people where(each.type = "Mid-career Professional") count(each.happyNeighbourhood=1))/nPeopleMidCareerProfessionalTotal;
+		happyNeighbourhoodExecutives <- (people where(each.type = "Executives") count(each.happyNeighbourhood=1))/nPeopleExecutivesTotal;
+		happyNeighbourhoodWorker <- (people where(each.type = "Worker") count(each.happyNeighbourhood=1))/nPeopleWorkerTotal;
+		happyNeighbourhoodRetiree <- (people where(each.type = "Retiree") count(each.happyNeighbourhood=1))/nPeopleRetireeTotal;
+		
 	}
 	
 	action countMobility{
-		propPeople_per_mobility_type <- map([]);	
 		loop i from: 0 to: length(allPossibleMobilityModes)-1 {
-			map<string,float> propPeople_per_mobility_indiv <- [];
-			loop j from:0 to: length(type_people) - 1{
-				int nPeople <- people count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
-				nPeople_per_mobility[allPossibleMobilityModes[i]] <- nPeople;
-				people_per_Mobility_now[allPossibleMobilityModes[i]]<-nPeople/nb_people;
-				
-				//int nPeopleEach <- people where(each.type = type_people[j]) count(each.mobility_mode_main_activity = allPossibleMobilityModes[i]); 				
-				int nPeopleEach <- people count(each.type = type_people[j] and each.mobility_mode_main_activity = allPossibleMobilityModes[i]);
-				propPeople_per_mobility_indiv[type_people[j]] <- nPeopleEach/nPeople_perProfile[type_people[j]];
-				add propPeople_per_mobility_indiv at: allPossibleMobilityModes[i] to: propPeople_per_mobility_type;				
-			}
+			int nPeople <- people count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			nPeople_per_mobility[allPossibleMobilityModes[i]] <- nPeople;
+			people_per_Mobility_now[allPossibleMobilityModes[i]]<-nPeople/nb_people;
+			
+			int nPeopleUndergrad <- people where(each.type = "Undergraduate student") count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			propPeople_per_mobility_Undergrad[allPossibleMobilityModes[i]] <- nPeopleUndergrad/nPeopleUndergradTotal;
+			int nPeopleGraduate <- people where(each.type = "Graduate student") count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			propPeople_per_mobility_Graduate[allPossibleMobilityModes[i]] <- nPeopleGraduate/nPeopleGraduateTotal;
+			int nPeoplePhD <- people where(each.type = "PhD") count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			propPeople_per_mobility_PhD[allPossibleMobilityModes[i]] <- nPeoplePhD/nPeoplePhDTotal;
+			int nPeopleYoungProfessional <- people where(each.type = "Young Professional") count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			propPeople_per_mobility_YoungProfessional[allPossibleMobilityModes[i]] <- nPeopleYoungProfessional/nPeopleYoungProfessionalTotal;
+			int nPeopleMidCareerProfessional <- people where(each.type = "Mid-career Professional") count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			propPeople_per_mobility_MidCareerProfessional[allPossibleMobilityModes[i]] <- nPeopleMidCareerProfessional/nPeopleMidCareerProfessionalTotal;
+			int nPeopleExecutives <- people where(each.type = "Executives") count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			propPeople_per_mobility_Executives[allPossibleMobilityModes[i]] <- nPeopleExecutives/nPeopleExecutivesTotal;
+			int nPeopleWorker <- people where(each.type = "Worker") count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			propPeople_per_mobility_Worker[allPossibleMobilityModes[i]] <- nPeopleWorker/nPeopleWorkerTotal;
+			int nPeopleRetiree <- people where(each.type = "Retiree") count(each.mobility_mode_main_activity=allPossibleMobilityModes[i]);
+			propPeople_per_mobility_Retiree[allPossibleMobilityModes[i]] <- nPeopleRetiree/nPeopleRetireeTotal;
 		}
-		//write propPeople_per_mobility_type;
-
 		meanTimeToMainActivity <-mean(people collect each.time_main_activity);
+		meanTimeToMainActivityUndergrad <-mean(people where(each.type = "Undergraduate student") collect each.time_main_activity);
+		meanTimeToMainActivityGraduate <-mean(people where(each.type = "Graduate student") collect each.time_main_activity);
+		meanTimeToMainActivityPhD <-mean(people where(each.type = "PhD") collect each.time_main_activity);
+		meanTimeToMainActivityYoungProfessional <-mean(people where(each.type = "Young Professional") collect each.time_main_activity);
+		meanTimeToMainActivityMidCareerProfessional <-mean(people where(each.type = "Mid-career Professional") collect each.time_main_activity);
+		meanTimeToMainActivityExecutives <-mean(people where(each.type = "Executives") collect each.time_main_activity);
+		meanTimeToMainActivityWorker <-mean(people where(each.type = "Worker") collect each.time_main_activity);
+		meanTimeToMainActivityRetiree <-mean(people where(each.type = "Retiree") collect each.time_main_activity);
+		
 		meanDistanceToMainActivity <- mean(people collect each.distance_main_activity);
-		loop k from:0 to: length(type_people) -1 {
-			meanTimeToMainActivity_perProfile[type_people[k]] <- mean(people where(each.type = type_people[k]) collect each.time_main_activity);
-			meanDistanceToMainActivity_perProfile[type_people[k]] <- mean(people where(each.type = type_people[k]) collect each.distance_main_activity);
-		}
-	
+		meanDistanceToMainActivityUndergrad <-mean(people where(each.type = "Undergraduate student") collect each.distance_main_activity);
+		meanDistanceToMainActivityGraduate <-mean(people where(each.type = "Graduate student") collect each.distance_main_activity);
+		meanDistanceToMainActivityPhD <-mean(people where(each.type = "PhD") collect each.distance_main_activity);
+		meanDistanceToMainActivityYoungProfessional <-mean(people where(each.type = "Young Professional") collect each.distance_main_activity);
+		meanDistanceToMainActivityMidCareerProfessional <-mean(people where(each.type = "Mid-career Professional") collect each.distance_main_activity);
+		meanDistanceToMainActivityExecutives <-mean(people where(each.type = "Executives") collect each.distance_main_activity);
+		meanDistanceToMainActivityWorker <-mean(people where(each.type = "Worker") collect each.distance_main_activity);
+		meanDistanceToMainActivityRetiree <-mean(people where(each.type = "Retiree") collect each.distance_main_activity);
 	}
 	
 	action initcalculateDiversityBuilding{
@@ -548,19 +620,6 @@ global{
 		ask people{
 			do changeHouse;
 		}
-		ask one_of(building where (each.satellite = false)) {
-			ask myCity{
-				do updateCityParams;
-			}
-		}
-		ask building where(each.satellite = false){
-			do normaliseDiversityBuilding;
-		}
-		ask one_of(building where(each.satellite = false)){
-			ask myCity{
-				do updateMeanDiver;
-			}
-		}
 		do countRent;
 		do countHappyPeople;
 		do countMobility;
@@ -573,7 +632,7 @@ global{
 		}
 	}
 	
-	/***reflex count{
+	reflex count{
 		peopleMovingRecord<<movingPeople;
 		meanDiversityRecord<<meanDiversityGlobal;
 		happyUnitSizePeopleRecord<<happyUnitSizePeople;
@@ -583,7 +642,7 @@ global{
 		proportionMobilityRecord<<people_per_Mobility_now;
 		meanRentRecord << meanRentPeople;
 		meanCommutingCostRecord << meanCommutingCostGlobal;
-	}***/
+	}
 		
 }
 
@@ -608,57 +667,38 @@ species people{
 	float distance_main_activity;
 	float CommutingCost;
 	float payingRent;
-	map<string,map<string,list<float>>> map_all_planets_transport;
-	map<string,list> map_all_planets_features; //other features apart from transportation
-	map<string,list<float>> map_planets_move_cand;
 	
 	aspect default{
 		draw circle(10) color:color;
 	}
 	
-	map<string,map<string,list<float>>> calculate_planetary_transport {
+	map<string,map<string,list<float>>> calculate_planetary {
+		point origin_location;
 		map<string,map<string,list<float>>> map_planet_transport;
 		map<string,list<float>> each_planet_transport;
 		loop i from: 0 to: length(list_planetary_cities) - 1 {
-			each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place, list_planetary_cities[i].dist);
-			//write each_planet_transport;
+			each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place);
 			add each_planet_transport at:list_planetary_cities[i] to: map_planet_transport;
 		}
-		//write map_planet_transport;	
-		return map_planet_transport;	
+		//write map_planet_transport;
+		return map_planet_transport;
+		
 	}
 	
-	map<string,list> calculate_planetary_features{
-		map<string,list> map_planet_feat;
-		loop i from: 0 to: length(list_planetary_cities) - 1{
-			list each_planet_feat <- [];
-			each_planet_feat << list_planetary_cities[i].meanRent;
-			each_planet_feat << unitSize_list[type]; //they will always be able to find their preferred unitSize
-			each_planet_feat << list_planetary_cities[i].name; //they will never be fine with the neighbourhood
-			each_planet_feat << list_planetary_cities[i].planetary_building.diversityNorm; //normalisedDiversity;
-			map_planet_feat[list_planetary_cities[i]] <- each_planet_feat;
-		} 
-		return map_planet_feat;
-	}
-	
-	map<string,list<float>> evaluate_main_trip(point origin_location,building destination, float distance_original <- nil){
+	map<string,list<float>> evaluate_main_trip(point origin_location,building destination){
 		list<list> candidates;
 		list<float> commuting_cost_list;
 		list<float> distance_list;
 		loop mode over:possibleMobModes{
 			list<float> characteristic<- charact_per_mobility[mode];
-			list<float> cand;	
-			float distance <- 0.0;		
-			if(distance_original = nil){
-				using topology(graph_per_mobility[mode]){
-					distance <- distance_to(origin_location,destination.location);
-				}
+			list<float> cand;
+			float distance<-0.0;
+			using topology(graph_per_mobility[mode]){
+				distance <- distance_to(origin_location,destination.location);
+				//write distance;
 			}
-			else{
-				distance <- distance_original;
-			}
-			cand<<characteristic[0] + characteristic[1]*distance;  //length unit meters
-			commuting_cost_list << (characteristic[0] + characteristic[1]*distance/1000)/reference_rent*days_per_month*2; //price with respect to a reference rent (*2 because we have rentPrices [0,2]
+			cand<<characteristic[0] + characteristic[1]*distance;  //meters¿?¿?
+			commuting_cost_list << (characteristic[0] + characteristic[1]*distance)/100/reference_rent*days_per_month; //price with respect to a reference rent
 			distance_list << distance;
 			cand<<characteristic[2]#mn + distance/speed_per_mobility[mode];
 			cand<<characteristic[4];
@@ -666,9 +706,6 @@ species people{
 			cand<<characteristic[5]*(weatherImpact?(1.0 + weather_of_day*weather_coeff_per_mobility[mode]):1.0);
 			add cand to: candidates;
 		}
-		//write candidates;
-		//write possibleMobModes;
-		//write commuting_cost_list;
 		//normalisation
 		list<float> max_values;
 		loop i from:0 to: length(candidates[0])-1{
@@ -728,7 +765,7 @@ species people{
 		exploredHouse<<possibleMoveBuilding;
 		float possibleLivingCost<-possibleMoveBuilding.rentPriceNorm;
 		float living_cost <- living_place.rentPriceNorm;
-		float possibleDiversity <- possibleMoveBuilding.diversityNorm;
+		float possibleDiversity <- possibleMoveBuilding.diversity;
 		string possibleUnitSize<-possibleMoveBuilding.scale;		
 		float possibleUnitSizeWeight <- calculate_unitSizeWeight(possibleUnitSize);
 		string possibleNeighbourhood <- possibleMoveBuilding.neighbourhood;
@@ -740,31 +777,36 @@ species people{
 		string possibleMobility <- possibleTimeAndMob.keys[0];
 		float possibleDistance <- possible_extract_list[2];
 		list<float> crit<- [priceImp_list[type],divacc_list[type],unitSizeWeight_list[type],patternWeight_list[type],time_importance_per_type[type]];
-		list<list> cands<-[[possibleLivingCost+possibleCommutingCost,possibleDiversity,possibleUnitSizeWeight,possiblePatternWeight, possibleTime],[living_cost + CommutingCost,living_place.diversityNorm,unitSizeWeight,actualPatternWeight, time_main_activity]];
-		loop i from: 0 to: length(list_planetary_cities) - 1{
-			list<float> possiblePlanetaryCand <- map_planets_move_cand[map_planets_move_cand.keys[i]];
-			cands << possiblePlanetaryCand;
-		}
-		//write cands;
+		list<list> cands<-[[possibleLivingCost+possibleCommutingCost,possibleDiversity,possibleUnitSizeWeight,possiblePatternWeight, possibleTime],[living_cost + CommutingCost,living_place.diversity,unitSizeWeight,actualPatternWeight, time_main_activity]];
+		
 		list<map> criteria_WM<-[];
 		loop i from:0 to: length(crit)-1{
 			criteria_WM<<["name"::"crit"+i, "weight"::crit[i]];
 		}		
-		//write criteria_WM;
+			
 		int choice <- weighted_means_DM(cands,criteria_WM);
 		
-		if (choice = 0){ 
+		if (choice=0){ 
 			living_place.vacant<-living_place.vacant+1;
 			building noLonger_living_place <- living_place;
 			possibleMoveBuilding.vacant<-possibleMoveBuilding.vacant-1;
 			living_place <- possibleMoveBuilding;
 			ask noLonger_living_place{
-				if(satellite = false){
-					do calculateDiversityBuilding;
-				}
+				do calculateDiversityBuilding;
 			}
 			ask living_place{
 				do calculateDiversityBuilding;
+				ask myCity{
+					do updateCityParams;
+				}
+			}
+			ask building{
+				do normaliseDiversityBuilding;
+			}
+			ask living_place{
+				ask myCity{
+					do updateMeanDiver;
+				}
 			}
 			priorHouse<<living_place;
 			location<-any_location_in(living_place);
@@ -779,53 +821,12 @@ species people{
 			CommutingCost <- possibleCommutingCost;
 			
 		}
-		else if (choice != 0 and choice!= 1){
-			if (living_place != list_planetary_cities[choice - 2].planetary_building){
-				living_place.vacant<-living_place.vacant + 1;
-				building nolonger_living_place <- living_place;
-				//write nolonger_living_place;
-				living_place <- list_planetary_cities[choice - 2].planetary_building;
-				happyUnitSize <- 1; //suponemos que en planetary_city siempre son capaces de encontrar el unitSize que quieren
-				//write living_place;
-				location <- any_location_in(living_place);
-				ask nolonger_living_place{
-					do calculateDiversityBuilding; //que pasara si el planetario ya no es living place¿? no pasará nunca por la cond y porque nunca pasará de un planetario al otro
-				}
-				movingPeople <- movingPeople + 1;
-				list<float> extract_cand_list <- map_planets_move_cand[map_planets_move_cand.keys[choice - 2]];
-				//write extract_cand_list;
-				list extract_features_list <- map_all_planets_features[map_planets_move_cand.keys[choice - 2]];
-				//write extract_features_list;
-				map<string,list<float>> extract_transport_map <- map_all_planets_transport[map_all_planets_transport.keys[choice - 2]];
-				//write extract_transport_map;
-				list extract_transport_list <- extract_transport_map[extract_transport_map.keys[0]];
-				//write extract_transport_list;
-				unitSizeWeight <- extract_cand_list[2];
-				//write unitSizeWeight;
-				actualUnitSize <- extract_features_list[1];
-				//write actualUnitSize;
-				actualPatternWeight <- extract_cand_list[3];
-				//write actualPatternWeight;
-				actualNeighbourhood <- extract_features_list[2];
-				//write actualNeighbourhood;
-				time_main_activity <- extract_cand_list[4];
-				//write time_main_activity;
-				distance_main_activity <- extract_transport_list[2];
-				//write distance_main_activity;
-				mobility_mode_main_activity <- extract_transport_map.keys[0];
-				//write mobility_mode_main_activity;
-				CommutingCost <- extract_features_list[1];		
-				//write CommutingCost;						
-			}
-		}
 		
-		if (living_place.satellite = false){
-			if (living_place.scale=unitSize_list[type]){
-				happyUnitSize<-1;	
-			}
-			else{
-				happyUnitSize<-0;
-			}
+		if (living_place.scale=unitSize_list[type]){
+			happyUnitSize<-1;	
+		}
+		else{
+			happyUnitSize<-0;
 		}
 		if(living_place.neighbourhood=pattern_list[type]){
 			happyNeighbourhood <- 1;
@@ -834,7 +835,7 @@ species people{
 			happyNeighbourhood <- 0;
 		}
 	}
-		
+	
 	float calculate_patternWeight(string possibleNeighbourhood){
 		float possible_patternWeight;
 		if(possibleNeighbourhood!=pattern_list[type]){
@@ -875,24 +876,31 @@ species city{
 	float meanCommutingCost;
 	
 	action updateCityParams{
-		maxRent<- max(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
-		minRent <- min(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
-		meanRent<- mean(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
+		maxRent<- max(building where (each.usage="R") collect each.rentPriceabs);
+		minRent <- min(building where (each.usage="R") collect each.rentPriceabs);
+		meanRent<- mean(building where (each.usage="R") collect each.rentPriceabs);
 	
 		meanRentnorm<-(meanRent-minRent)/(maxRent-minRent);
 		
-		maxdiver<-max(building where (each.usage = "R" and each.myCity = self) collect each.diversity);
-		mindiver<-min(building where (each.usage = "R" and each.myCity = self) collect each.diversity);
+		maxdiver<-max(building where (each.usage = "R") collect each.diversity);
+		//write maxdiver;
+		mindiver<-min(building where (each.usage = "R") collect each.diversity);
+		//write mindiver;		
+		//meandiver<-geometric_mean(building where(each.usage="R" and each.vacant!=each.supported_people) collect each.diversity);
 		meanCommutingCost <- mean(people collect each.CommutingCost);
 		meanCommutingCostGlobal <- meanCommutingCost;
-		
-		loop i from: 0 to: length(type_people) - 1 {
-			meanCommutingCost_perProfile[type_people[i]] <- mean(people where(each.type = type_people[i]) collect each.CommutingCost);
-		}
+		meanCommutingCostUndergrad <- mean(people where(each.type = "Undergraduate student") collect each.CommutingCost);
+		meanCommutingCostGraduate <- mean(people where(each.type = "Graduate student") collect each.CommutingCost);
+		meanCommutingCostPhD <- mean(people where(each.type = "PhD") collect each.CommutingCost);
+		meanCommutingCostYoungProfessional <- mean(people where(each.type = "Young Professional") collect each.CommutingCost);
+		meanCommutingCostMidCareerProfessional <- mean(people where(each.type = "Mid-career Professional") collect each.CommutingCost);
+		meanCommutingCostExecutives <- mean(people where(each.type = "Executives") collect each.CommutingCost);
+		meanCommutingCostRetiree <- mean(people where(each.type = "Retiree") collect each.CommutingCost);
+		meanCommutingCostWorker <- mean(people where(each.type = "Worker") collect each.CommutingCost);
 	}
 	
 	action updateMeanDiver{
-		meandiver<-mean(building where(each.usage="R" and each.vacant!=each.supported_people and each.myCity = self) collect each.diversityNorm);
+		meandiver<-mean(building where(each.usage="R" and each.vacant!=each.supported_people) collect each.diversityNorm);
 		meanDiversityGlobal<-meandiver;
 	}
 }
@@ -904,7 +912,6 @@ species planetary_city parent: city {
 	list<string> possible_transport;
 	float location_x;
 	float location_y;
-	building planetary_building;
 	
 	aspect basic{
 		draw square(20#px) color: rgb(220,220,220,125);
@@ -931,7 +938,6 @@ species building{
 	string type; //building or ruins or whatever
 	int supported_people; //how many people can live in this building
 	string neighbourhood;	
-	bool satellite;
 	
 	list<float> calculateDistances{
 		list<float> dist_list <- [];
@@ -989,7 +995,6 @@ species building{
 			rentPriceNorm_gen <- 0.0;
 		}
 		
-		rentPriceNorm_gen <- rentPriceNorm_gen + 1; //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
 		return rentPriceNorm_gen;
 	}
 	
@@ -1035,7 +1040,7 @@ species building{
 	
 	action changeColorPrice{
 		if (usage="R"){
-			float colorPriceValue<-255*(rentPriceNorm - 1);
+			float colorPriceValue<-255*rentPriceNorm;
 			colorPrice<-rgb(max([0,colorPriceValue]),min([255,255-colorPriceValue]),0,125);
 		}
 		
@@ -1049,10 +1054,6 @@ species building{
 	aspect default{
 		draw shape color: rgb(50,50,50,125);
 	}
-	
-}
-
-species sat_building parent:building{
 	
 }
 
@@ -1103,11 +1104,38 @@ experiment visual type:gui{
                 draw "Icons" at: { 40#px, y } color: text_color font: font("Helvetica", 20, #bold) perspective:false;
                 y <- y + 30 #px;
                 
-                loop i from: 0 to: length(type_people) - 1 {
-                	draw square(10#px) at: {20#px, y} color:color_per_type[type_people[i]] border: #white;
-                	draw string(type_people[i]) at: {40#px, y + 4#px} color: text_color font: font("Helvetica",16,#plain) perspective: false;
-                	y <- y + 25#px;
-                }                    
+                draw square(10#px) at: { 20#px, y } color: rgb(0,255,255) border: #white;
+                draw string("Undergraduate students") at: { 40#px, y + 4#px } color: text_color font: font("Helvetica", 16, #plain) perspective:false;
+                y <- y + 25#px;
+                
+                draw square(10#px) at: { 20#px, y } color: #blue border: #white;
+                draw string("Graduate students") at: { 40#px, y + 4#px } color: text_color font: font("Helvetica", 16, #plain) perspective:false;
+                y <- y + 25#px;
+                
+                draw square(10#px) at: { 20#px, y } color: #yellow border: #white;
+                draw string("PhD") at: { 40#px, y + 4#px } color: text_color font: font("Helvetica", 16, #plain) perspective:false;
+                y <- y + 25#px;
+                
+                draw square(10#px) at: { 20#px, y } color: #white border: #white;
+                draw string("Young Professional") at: { 40#px, y + 4#px } color: text_color font: font("Helvetica", 16, #plain) perspective:false;
+                y <- y + 25#px;
+                
+                draw square(10#px) at: { 20#px, y } color: #green border: #white;
+                draw string("Mid career Professional") at: { 40#px, y + 4#px } color: text_color font: font("Helvetica", 16, #plain) perspective:false;
+                y <- y + 25#px;
+                
+                draw square(10#px) at: { 20#px, y } color: rgb(102,0,102) border: #white;
+                draw string("Executives") at: { 40#px, y + 4#px } color: text_color font: font("Helvetica", 16, #plain) perspective:false;
+                y <- y + 25#px;
+                
+               	draw square(10#px) at: { 20#px, y } color: rgb(128,128,128) border: #white;
+                draw string("Retiree") at: { 40#px, y + 4#px } color: text_color font: font("Helvetica", 16, #plain) perspective:false;
+                y <- y + 25#px;
+                
+                draw square(10#px) at: { 20#px, y } color: rgb(128,128,0) border: #white;
+                draw string("Worker") at: { 40#px, y + 4#px } color: text_color font: font("Helvetica", 16, #plain) perspective:false;
+                y <- y + 25#px;
+                    
             }
             
 		}
@@ -1124,15 +1152,25 @@ experiment visual type:gui{
 		display HappyUnitSizeNeighbourhood{
 			chart "Proportion of people happy with their UnitSize" type:series background: #white position:{0,0.0} size:{1.0,0.5}{
 				data "Happy unitSize" value: happyUnitSizePeople color: #black;
-				loop i from: 0 to: length(type_people) -1 {
-					data type_people[i] value: happyUnitSize_perProfile[type_people[i]] color: color_per_type[type_people[i]];
-				}
+				data "Undergraduate students" value: happyUnitSizeUndergrad color: rgb(0,255,255);
+				data "Graduate students" value: happyUnitSizeGraduate color: #blue;
+				data "PhD" value: happyUnitSizePhD color: #yellow;
+				data "Young Professionals" value: happyUnitSizeYoungProfessional color: #orange;
+				data "Mid-career Professionals" value: happyUnitSizeMidCareerProfessional color: #green;
+				data "Executives" value: happyUnitSizeExecutives color:rgb(102,0,102);
+				data "Worker" value: happyUnitSizeWorker color: rgb(128,128,0);
+				data "Retiree" value: happyUnitSizeRetiree color: rgb(128,128,128);
 			}
 			chart "Proportion of people happy with their Neighbourhood" type: series background:#white position: {0,0.5} size:{1.0,0.5}{
 				data "Happy Neighbourhood" value: happyNeighbourhoodPeople color: #black;
-				loop i from: 0 to: length(type_people) -1 {
-					data type_people[i] value: happyNeighbourhood_perProfile[type_people[i]] color: color_per_type[type_people[i]];
-				}
+				data "Undergraduate students" value: happyNeighbourhoodUndergrad color: rgb(0,255,255);
+				data "Graduate students" value: happyNeighbourhoodGraduate color: #blue;
+				data "PhD" value: happyNeighbourhoodPhD color: #yellow;
+				data "Young Professionals" value: happyNeighbourhoodYoungProfessional color: #orange;
+				data "Mid-career Professionals" value: happyNeighbourhoodMidCareerProfessional color: #green;
+				data "Executives" value: happyNeighbourhoodExecutives color:rgb(102,0,102);
+				data "Worker" value: happyNeighbourhoodWorker color: rgb(128,128,0);
+				data "Retiree" value: happyNeighbourhoodRetiree color: rgb(128,128,128);
 			}
 					
 		}
@@ -1140,15 +1178,25 @@ experiment visual type:gui{
 		display RentCommutingCosts{
 			chart "Mean rent" type:series background: #white position:{0,0} size:{1.0, 0.5}{
 				data "Mean normalised rent in myCity" value: meanRentPeople color: #black;
-				loop i from: 0 to: length(type_people) -1 {
-					data type_people[i] value: meanRent_perProfile[type_people[i]] color: color_per_type[type_people[i]];
-				}
+				data "Undergraduate students" value: meanRentUndergrad color: rgb(0,255,255);
+				data "Graduate students" value: meanRentGraduate color: #blue;
+				data "PhD" value: meanRentPhD color: #yellow;
+				data "Young Professionals" value: meanRentYoungProfessional color: #orange;
+				data "Mid-career Professionals" value: meanRentMidCareerProfessional color: #green;
+				data "Executives" value: meanRentExecutives color:rgb(102,0,102);
+				data "Worker" value: meanRentWorker color: rgb(128,128,0);
+				data "Retiree" value: meanRentRetiree color: rgb(128,128,128);
  			}
 			chart "Mean CommutingCost" type:series background: #white position:{0,0.5} size:{1.0,0.5}{
 				data "Mean CommutingCost" value: meanCommutingCostGlobal color: #black;
-				loop i from: 0 to: length(type_people) - 1 {
-					data type_people[i] value: meanCommutingCost_perProfile[type_people[i]] color: color_per_type[type_people[i]];
-				}
+				data "Undergraduate students" value: meanCommutingCostUndergrad color: rgb(0,255,255);
+				data "Graduate students" value: meanCommutingCostGraduate color: #blue;
+				data "PhD" value: meanCommutingCostPhD color: #yellow;
+				data "Young Professionals" value: meanCommutingCostYoungProfessional color: #orange;
+				data "Mid-career Professionals" value: meanCommutingCostMidCareerProfessional color: #green;
+				data "Executives" value: meanCommutingCostExecutives color:rgb(102,0,102);
+				data "Worker" value: meanCommutingCostWorker color: rgb(128,128,0);
+				data "Retiree" value: meanCommutingCostRetiree color: rgb(128,128,128);
 			}
 		}
 		display MobilityPie{
@@ -1161,53 +1209,76 @@ experiment visual type:gui{
 			}
 			chart "Mean time to main activity" type: series background: #white position:{0,0.25} size:{1.0,0.35}{
 				data "Mean time to main activity" value:meanTimeToMainActivity color:#black;
-				loop i from:0 to: length(type_people) -1 {
-					data type_people[i] value: meanTimeToMainActivity_perProfile[type_people[i]] color: color_per_type[type_people[i]];
-				}
+				data "Undergraduate students" value: meanTimeToMainActivityUndergrad color: rgb(0,255,255);
+				data "Graduate students" value: meanTimeToMainActivityGraduate color: #blue;
+				data "PhD" value: meanTimeToMainActivityPhD color: #yellow;
+				data "Young Professionals" value: meanTimeToMainActivityYoungProfessional color: #orange;
+				data "Mid-career Professionals" value: meanTimeToMainActivityMidCareerProfessional color: #green;
+				data "Executives" value: meanTimeToMainActivityExecutives color:rgb(102,0,102);
+				data "Worker" value: meanTimeToMainActivityWorker color: rgb(128,128,0);
+				data "Retiree" value: meanTimeToMainActivityRetiree color: rgb(128,128,128);
 			}
 			chart "Mean distance to main activity" type: series background:#white position: {0,0.6} size:{1.0,0.35}{
 				data "Mean distance to main activity" value:meanDistanceToMainActivity color: #black;
-				loop i from: 0 to: length(type_people) - 1 {
-					data type_people[i] value: meanDistanceToMainActivity_perProfile[type_people[i]] color: color_per_type[type_people[i]];
-				}
+				data "Undergraduate students" value: meanDistanceToMainActivityUndergrad color: rgb(0,255,255);
+				data "Graduate students" value: meanDistanceToMainActivityGraduate color: #blue;
+				data "PhD" value: meanDistanceToMainActivityPhD color: #yellow;
+				data "Young Professionals" value: meanDistanceToMainActivityYoungProfessional color: #orange;
+				data "Mid-career Professionals" value: meanDistanceToMainActivityMidCareerProfessional color: #green;
+				data "Executives" value: meanDistanceToMainActivityExecutives color:rgb(102,0,102);
+				data "Worker" value: meanDistanceToMainActivityWorker color: rgb(128,128,0);
+				data "Retiree" value: meanDistanceToMainActivityRetiree color: rgb(128,128,128);
 			}
 		}
 		display MobilityChartsCarsBikes{	
 
 			chart "Proportion of people using cars" type: series background: #white position:{0,0.0} size: {1.0,0.5}{
-				data "Mean proportion of people" value: people_per_Mobility_now.values[1] color: #black;
-				/***map<string,float> extract_info_mobility <- [];
-				extract_info_mobility <- propPeople_per_mobility_type[allPossibleMobilityModes[1]];***/
-				loop i from: 0 to:length(type_people) - 1{
-					data type_people[i] value: propPeople_per_mobility_type[allPossibleMobilityModes[1]].values[i] color: color_per_type[type_people[i]];
-				}
+				//data "Number of people using cars in myCity" value: nPeople_per_mobility.values[1] color: #black;
+				data "Undergraduate students" value: propPeople_per_mobility_Undergrad.values[1] color: rgb(0,255,255);
+				data "Graduate students" value: propPeople_per_mobility_Graduate.values[1] color: #blue;
+				data "PhD" value: propPeople_per_mobility_PhD.values[1] color: #yellow;
+				data "Young Professionals" value: propPeople_per_mobility_YoungProfessional.values[1] color: #orange;
+				data "Mid-career Professionals" value: propPeople_per_mobility_MidCareerProfessional.values[1] color: #green;
+				data "Executives" value: propPeople_per_mobility_Executives.values[1] color:rgb(102,0,102);
+				data "Worker" value: propPeople_per_mobility_Worker.values[1] color: rgb(128,128,0);
+				data "Retiree" value: propPeople_per_mobility_Retiree.values[1] color: rgb(128,128,128);
 			}
 			chart "Proportion of people using bikes" type: series background: #white position:{0,0.5} size: {1.0,0.5}{
-				data "Mean proportion of people" value: people_per_Mobility_now.values[2] color: #black;
-				/***map<string,float> extract_info_mobility <- [];
-				extract_info_mobility <- propPeople_per_mobility_type[allPossibleMobilityModes[2]];***/
-				loop i from: 0 to:length(type_people) - 1{
-					data type_people[i] value: propPeople_per_mobility_type[allPossibleMobilityModes[2]].values[i] color: color_per_type[type_people[i]];
-				}
-			}	
+				//data "Number of people using bikes" value: nPeople_per_mobility.values[2] color: #black;
+				data "Undergraduate students" value: propPeople_per_mobility_Undergrad.values[2] color: rgb(0,255,255);
+				data "Graduate students" value: propPeople_per_mobility_Graduate.values[2] color: #blue;
+				data "PhD" value: propPeople_per_mobility_PhD.values[2] color: #yellow;
+				data "Young Professionals" value: propPeople_per_mobility_YoungProfessional.values[2] color: #orange;
+				data "Mid-career Professionals" value: propPeople_per_mobility_MidCareerProfessional.values[2] color: #green;
+				data "Executives" value: propPeople_per_mobility_Executives.values[2] color:rgb(102,0,102);
+				data "Worker" value: propPeople_per_mobility_Worker.values[2] color: rgb(128,128,0);
+				data "Retiree" value: propPeople_per_mobility_Retiree.values[2] color: rgb(128,128,128);
+			}
 		}
 		display MobilityChartsBusWalking{
 			chart "Proportion of people using bus" type: series background: #white position:{0,0.0} size: {1.0,0.5}{
-				data "Mean proportion of people" value: people_per_Mobility_now.values[3] color: #black;
-				/***map<string,float> extract_info_mobility <- [];
-				extract_info_mobility <- propPeople_per_mobility_type[allPossibleMobilityModes[3]];***/
-				loop i from: 0 to:length(type_people) - 1{
-					data type_people[i] value: propPeople_per_mobility_type[allPossibleMobilityModes[3]].values[i] color: color_per_type[type_people[i]];
-				}
+				//data "Number of people using bus" value: nPeople_per_mobility.values[3] color: #black;
+				data "Undergraduate students" value: propPeople_per_mobility_Undergrad.values[3] color: rgb(0,255,255);
+				data "Graduate students" value: propPeople_per_mobility_Graduate.values[3] color: #blue;
+				data "PhD" value: propPeople_per_mobility_PhD.values[3] color: #yellow;
+				data "Young Professionals" value: propPeople_per_mobility_YoungProfessional.values[3] color: #orange;
+				data "Mid-career Professionals" value: propPeople_per_mobility_MidCareerProfessional.values[3] color: #green;
+				data "Executives" value: propPeople_per_mobility_Executives.values[3] color:rgb(102,0,102);
+				data "Worker" value: propPeople_per_mobility_Worker.values[3] color: rgb(128,128,0);
+				data "Retiree" value: propPeople_per_mobility_Retiree.values[3] color: rgb(128,128,128);
 			}
 			chart "Proportion of people walking" type: series background: #white position:{0,0.5} size: {1.0,0.5}{
-				data "Mean proportion of people" value: people_per_Mobility_now.values[0] color: #black;
-				/***map<string,float> extract_info_mobility <- [];
-				extract_info_mobility <- propPeople_per_mobility_type[allPossibleMobilityModes[0]];***/
-				loop i from: 0 to:length(type_people) - 1{
-					data type_people[i] value: propPeople_per_mobility_type[allPossibleMobilityModes[0]].values[i] color: color_per_type[type_people[i]];
-				}
-			}			
+				//data "Number of people walking" value: nPeople_per_mobility.values[0] color: #black;
+				data "Undergraduate students" value: propPeople_per_mobility_Undergrad.values[0] color: rgb(0,255,255);
+				data "Graduate students" value: propPeople_per_mobility_Graduate.values[0] color: #blue;
+				data "PhD" value: propPeople_per_mobility_PhD.values[0] color: #yellow;
+				data "Young Professionals" value: propPeople_per_mobility_YoungProfessional.values[0] color: #orange;
+				data "Mid-career Professionals" value: propPeople_per_mobility_MidCareerProfessional.values[0] color: #green;
+				data "Executives" value: propPeople_per_mobility_Executives.values[0] color:rgb(102,0,102);
+				data "Worker" value: propPeople_per_mobility_Worker.values[0] color: rgb(128,128,0);
+				data "Retiree" value: propPeople_per_mobility_Retiree.values[0] color: rgb(128,128,128);
+			}
+			
 		}
 		
 		monitor "Number of people moving" value:movingPeople;
