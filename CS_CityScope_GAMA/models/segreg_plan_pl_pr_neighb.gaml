@@ -1,5 +1,5 @@
 /***
-* Name: segregplanetarymoreAgentsPrice
+* Name: segregplanplprneighb
 * Author: 
 * Description: 
 * Tags: Tag1, Tag2, TagN
@@ -10,7 +10,7 @@
 * !!! en parte se le está dando el doble de peso al precio que a todo lo demás, basándose en que se suma +1.
 ***/
 
-model segreg_planetary_moreAgents_Price
+model segreg_plan_pl_pr_neighb
 
 global{
 	int totalSupportedPeople <- 0;
@@ -97,12 +97,12 @@ global{
 	map<string,float> divacc_list;
 	map<string,string> unitSize_list;
 	map<string,float> unitSizeWeight_list;
-	map<string,string> pattern_list;
+	map<string,list<string>> pattern_list;
 	map<string,float> patternWeight_list;
 	
 	//file weight_distances_file<-file("./../includes/Game_IT/WeightDistances.csv");
 	file weight_distances_file<-file("./../includes/Game_IT/WeightDistances2.csv");
-	file criteria_home_file <- file("./../includes/Game_IT/CriteriaHome.csv");
+	file criteria_home_file <- file("./../includes/Game_IT/CriteriaHome2.csv");
 	string case_study<-"volpe";
 	list<string> list_neighbourhoods <- [];
 	string cityGISFolder<-"./../includes/City/"+case_study;
@@ -165,10 +165,18 @@ global{
 			divacc_list << (type_people[i]::criteriaHome_matrix[2,i]);
 			unitSize_list << (type_people[i]::criteriaHome_matrix[3,i]);
 			unitSizeWeight_list << (type_people[i]::criteriaHome_matrix[4,i]);
-			pattern_list << (type_people[i]::criteriaHome_matrix[5,i]);
+			
+			string cat_name <- criteriaHome_matrix[5,i];
+			list<string> name_list;
+			loop cat over: cat_name split_with "|"{
+				name_list << cat;
+			}
+			add name_list at: type_people[i] to: pattern_list;
+			//pattern_list << (type_people[i]::criteriaHome_matrix[5,i]);
 			patternWeight_list << (type_people[i]::criteriaHome_matrix[6,i]);		
 			 
 		}
+		write pattern_list;
 	}
 	
 	action createCity{
@@ -193,7 +201,7 @@ global{
 			prices_planetary << (prices_planetary_i - minRentGlobal) / (maxRentGlobal - minRentGlobal);
 		} 
 		int min_price_planetary <- min(prices_planetary) - 1;
-		write min_price_planetary;
+		//write min_price_planetary;
 		make_positive <- - min_price_planetary;
 		ask building where(each.usage="R"){					
 			rentPriceNorm <- (rentPriceNorm + make_positive)/((make_positive + 1)*precio_doble); //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
@@ -208,7 +216,7 @@ global{
 				has_T <- planetary_matrix[3,i];
 				meanRent <- planetary_matrix[4,i];
 				meanRent <- (meanRent - minRentGlobal) / (maxRentGlobal - minRentGlobal);
-				write meanRent;
+				//write meanRent;
 				meanRent <- (meanRent + make_positive)/(make_positive + 1)*precio_doble; //para que no estén en negativo
 				//meanRent <- (meanRent + make_positive); //para que no estén en negativo
 				location_x <- planetary_matrix[5,i];
@@ -489,7 +497,8 @@ global{
 					else{
 						happyUnitSize<-0;
 					}
-					if (living_place.neighbourhood=pattern_list[type]){
+					list<string> extract_list <- pattern_list[type];
+					if (living_place.neighbourhood = extract_list[0]){
 						happyNeighbourhood<-1;
 					}
 					else{
@@ -517,6 +526,7 @@ global{
 					distance_main_activity <- extract_list[2];
 					mobility_mode_main_activity<-mobilityAndTime.keys[0];
 					map_all_planets_transport <- calculate_planetary_transport();
+					//write map_all_planets_transport;
 					map_all_planets_features <- calculate_planetary_features();
 					loop i from: 0 to: length(list_planetary_cities) - 1 {
 						list extract_features_list <- map_all_planets_features[map_all_planets_features.keys[i]];
@@ -524,13 +534,15 @@ global{
 						list<float> extract_transport_mode_list <- extract_transport_mode_map[extract_transport_mode_map.keys[0]];
 						float possiblePlanetaryLivingCost <- extract_features_list[0];
 						float possiblePlanetaryCommutingCost <- extract_transport_mode_list[1];
+						//write possiblePlanetaryCommutingCost;
 						float possiblePlanetaryDiversity <- extract_features_list[3];
 						float possiblePlanetaryUnitSizeWeight <- calculate_unitSizeWeight(extract_features_list[1]);
 						float possiblePlanetaryPatternWeight <- calculate_patternWeight(extract_features_list[2]);
 						float possiblePlanetaryTime <- extract_transport_mode_list[0];
 						list<float> possiblePlanetaryCand <- [possiblePlanetaryLivingCost + possiblePlanetaryCommutingCost, possiblePlanetaryDiversity, possiblePlanetaryUnitSizeWeight, possiblePlanetaryPatternWeight, possiblePlanetaryTime];
 						map_planets_move_cand[list_planetary_cities[i]] <- possiblePlanetaryCand;
-					}			
+					}
+					//write map_planets_move_cand;			
 				}
 			}
 		}
@@ -1015,7 +1027,7 @@ species people{
 				time_main_activity <- extract_cand_list[4];
 				distance_main_activity <- extract_transport_list[2];
 				mobility_mode_main_activity <- extract_transport_map.keys[0];
-				CommutingCost <- extract_features_list[1];						
+				CommutingCost <- extract_transport_list[1];						
 			}
 		}
 		
@@ -1027,22 +1039,41 @@ species people{
 				happyUnitSize <- 0;
 			}
 		}
-		if(living_place.neighbourhood=pattern_list[type]){
+		list<string> extract_list <- pattern_list[type];
+		if(living_place.neighbourhood = extract_list[0]){
 			happyNeighbourhood <- 1;
 		}
 		else{
 			happyNeighbourhood <- 0;
 		}
+		
 	}
 		
 	float calculate_patternWeight(string possibleNeighbourhood){
 		float possible_patternWeight;
-		if(possibleNeighbourhood!=pattern_list[type]){
+		list<string> extract_list <- pattern_list[type];
+		//write extract_list;
+		//write possibleNeighbourhood;
+		int donde <- 1000;
+		loop i from: 0 to: length(extract_list) - 1 {
+			if (possibleNeighbourhood = extract_list[i]){
+				donde <- i;
+				//write 'donde' + donde;
+			}
+		}
+		
+		possible_patternWeight <- 1.0 - donde*0.3;
+		if (possible_patternWeight < - 1.0){
+			possible_patternWeight <- -1.0;
+		}
+		/***
+		if(possibleNeighbourhood != pattern_list[type]){
 			possible_patternWeight<- -1.0;
 		}
 		else{
 			possible_patternWeight<-1.0;
-		}
+		}***/
+		//write "pattern_weight" + possible_patternWeight;
 		return possible_patternWeight;
 	}
 	
