@@ -814,7 +814,7 @@ species people{
 				//write distance_main_activity;
 				mobility_mode_main_activity <- extract_transport_map.keys[0];
 				//write mobility_mode_main_activity;
-				CommutingCost <- extract_features_list[1];		
+				CommutingCost <- extract_transport_list[1];		
 				//write CommutingCost;						
 			}
 		}

@@ -106,7 +106,7 @@ global{
 	string case_study<-"volpe";
 	list<string> list_neighbourhoods <- [];
 	string cityGISFolder<-"./../includes/City/"+case_study;
-	file<geometry>buildings_shapefile<-file<geometry>(cityGISFolder+"/Buildings.shp");
+	file<geometry>buildings_shapefile<-file<geometry>(cityGISFolder+"/Buildings_Kendall3.shp");
 	file<geometry> roads_shapefile<-file<geometry>(cityGISFolder+"/Roads.shp");
 	file activity_file <- file("./../includes/Game_IT/ActivityPerProfile.csv");
 	file mode_file <- file("./../includes/Game_IT/Modes.csv");
@@ -172,11 +172,9 @@ global{
 				name_list << cat;
 			}
 			add name_list at: type_people[i] to: pattern_list;
-			//pattern_list << (type_people[i]::criteriaHome_matrix[5,i]);
 			patternWeight_list << (type_people[i]::criteriaHome_matrix[6,i]);		
 			 
 		}
-		write pattern_list;
 	}
 	
 	action createCity{
@@ -197,15 +195,24 @@ global{
 		matrix planetary_matrix <- matrix(planetary_city_doc);
 		list<float> prices_planetary <- [];
 		loop i from:0 to: planetary_matrix.rows - 1{
-			int prices_planetary_i <- planetary_matrix[4,i];
+			float prices_planetary_i <- planetary_matrix[4,i] ;
+			prices_planetary_i <- prices_planetary_i / 2; //es por dos habitaciones
 			prices_planetary << (prices_planetary_i - minRentGlobal) / (maxRentGlobal - minRentGlobal);
 		} 
+		int min_price_dorm <- min(building where (each.dorm = 1) collect each.rentPriceNorm) - 1;
 		int min_price_planetary <- min(prices_planetary) - 1;
-		//write min_price_planetary;
+		if(min_price_dorm < min_price_planetary){
+			min_price_planetary <- min_price_dorm;
+		}
 		make_positive <- - min_price_planetary;
-		ask building where(each.usage="R"){					
-			rentPriceNorm <- (rentPriceNorm + make_positive)/((make_positive + 1)*precio_doble); //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
-			//rentPriceNorm <- (rentPriceNorm + make_positive); //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
+		ask building where(each.usage="R"){		
+			if (make_positive != -1){
+				rentPriceNorm <- (rentPriceNorm + make_positive)/((make_positive + 1)*precio_doble); //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
+			}	
+			else{
+				rentPriceNorm <- (rentPriceNorm + make_positive) / 2; //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
+			}		
+			
 		}
 		loop i from: 0 to: planetary_matrix.rows - 1{
 			create planetary_city{
@@ -215,10 +222,8 @@ global{
 				has_bus <- planetary_matrix[2,i];
 				has_T <- planetary_matrix[3,i];
 				meanRent <- planetary_matrix[4,i];
-				meanRent <- (meanRent - minRentGlobal) / (maxRentGlobal - minRentGlobal);
-				//write meanRent;
-				meanRent <- (meanRent + make_positive)/(make_positive + 1)*precio_doble; //para que no estén en negativo
-				//meanRent <- (meanRent + make_positive); //para que no estén en negativo
+				meanRent <- ((meanRent/2) - minRentGlobal) / (maxRentGlobal - minRentGlobal);
+				meanRent <- (meanRent + make_positive)/((make_positive + 1)*precio_doble); //para que no estén en negativo
 				location_x <- planetary_matrix[5,i];
 				location_y <- planetary_matrix[6,i];
 				location <- {location_x,location_y};
@@ -242,10 +247,13 @@ global{
 				planetary_building <- list_planetary_cities[i].planetary_building;
 			}			
 		}
+		ask building where(each.usage = "R"){
+			do changeColorPrice;
+		}
 	}
 	
 	action createBuildings{
-		create building from: buildings_shapefile with:[usage::string(read("Usage")),scale::string(read("Scale")),category::string(read("Category")), FAR::float(read("FAR")), max_height::float(read("Max_Height")), type::string(read("TYPE")), neighbourhood::string(read("NAME"))] {
+		create building from: buildings_shapefile with:[usage::string(read("Usage")),scale::string(read("Scale")),category::string(read("Category")), FAR::float(read("FAR")), max_height::float(read("Max_Height")), type::string(read("TYPE")), neighbourhood::string(read("NAME")), ID::int(read("BUILDING_I")), dorm::int(read("Dorm")), luxury::int(read("Luxury"))] {
 			myCity <- one_of(city where(each.name = "ppal"));
 			area<-shape.area;
 			perimeter<- shape.perimeter;	
@@ -285,21 +293,16 @@ global{
 	}
 	
 	action calculateAbsRent{
-		do MakePositive;
 		ask building where(each.usage="R"){
 			distances<-calculateDistances();
 			rentPriceabs<-calculateRent();
 		}
 	}
 	
-	action MakePositive{
-		
-	}
-	
 	action calculateNormRent{
 		ask building where(each.usage="R"){
 			rentPriceNorm<-normalise_rent();
-			do changeColorPrice;
+			//do changeColorPrice;
 		}
 	}
 	
@@ -526,7 +529,6 @@ global{
 					distance_main_activity <- extract_list[2];
 					mobility_mode_main_activity<-mobilityAndTime.keys[0];
 					map_all_planets_transport <- calculate_planetary_transport();
-					//write map_all_planets_transport;
 					map_all_planets_features <- calculate_planetary_features();
 					loop i from: 0 to: length(list_planetary_cities) - 1 {
 						list extract_features_list <- map_all_planets_features[map_all_planets_features.keys[i]];
@@ -534,15 +536,13 @@ global{
 						list<float> extract_transport_mode_list <- extract_transport_mode_map[extract_transport_mode_map.keys[0]];
 						float possiblePlanetaryLivingCost <- extract_features_list[0];
 						float possiblePlanetaryCommutingCost <- extract_transport_mode_list[1];
-						//write possiblePlanetaryCommutingCost;
 						float possiblePlanetaryDiversity <- extract_features_list[3];
 						float possiblePlanetaryUnitSizeWeight <- calculate_unitSizeWeight(extract_features_list[1]);
 						float possiblePlanetaryPatternWeight <- calculate_patternWeight(extract_features_list[2]);
 						float possiblePlanetaryTime <- extract_transport_mode_list[0];
 						list<float> possiblePlanetaryCand <- [possiblePlanetaryLivingCost + possiblePlanetaryCommutingCost, possiblePlanetaryDiversity, possiblePlanetaryUnitSizeWeight, possiblePlanetaryPatternWeight, possiblePlanetaryTime];
 						map_planets_move_cand[list_planetary_cities[i]] <- possiblePlanetaryCand;
-					}
-					//write map_planets_move_cand;			
+					}			
 				}
 			}
 		}
@@ -968,7 +968,6 @@ species people{
 		
 		loop i from: 0 to: length(list_planetary_cities) - 1{
 			list<float> possiblePlanetaryCand <- map_planets_move_cand[map_planets_move_cand.keys[i]];
-			//write possiblePlanetaryCand;
 			cands << possiblePlanetaryCand;
 		}
 		list<map> criteria_WM<-[];
@@ -1052,13 +1051,10 @@ species people{
 	float calculate_patternWeight(string possibleNeighbourhood){
 		float possible_patternWeight;
 		list<string> extract_list <- pattern_list[type];
-		//write extract_list;
-		//write possibleNeighbourhood;
 		int donde <- 1000;
 		loop i from: 0 to: length(extract_list) - 1 {
 			if (possibleNeighbourhood = extract_list[i]){
 				donde <- i;
-				//write 'donde' + donde;
 			}
 		}
 		
@@ -1066,14 +1062,6 @@ species people{
 		if (possible_patternWeight < - 1.0){
 			possible_patternWeight <- -1.0;
 		}
-		/***
-		if(possibleNeighbourhood != pattern_list[type]){
-			possible_patternWeight<- -1.0;
-		}
-		else{
-			possible_patternWeight<-1.0;
-		}***/
-		//write "pattern_weight" + possible_patternWeight;
 		return possible_patternWeight;
 	}
 	
@@ -1106,12 +1094,10 @@ species city{
 	float meanCommutingCost;
 	
 	action updateCityParams{
-		maxRent<- max(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
-		minRent <- min(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
+		maxRent<- max(building where (each.usage="R" and each.myCity = self and each.dorm = 0 and each.luxury = 0) collect each.rentPriceabs);
+		minRent <- min(building where (each.usage="R" and each.myCity = self and each.dorm = 0 and each.luxury = 0) collect each.rentPriceabs);
 		minRentGlobal <- minRent;
 		maxRentGlobal <- maxRent;
-		//write maxRent;
-		//write minRent;
 		meanRent<- mean(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
 	
 		meanRentnorm<-(meanRent-minRent)/(maxRent-minRent);
@@ -1158,6 +1144,7 @@ species planetary_city parent: city {
 } 
 
 species building{
+	int ID;
 	city myCity;
 	string usage;
 	string scale;
@@ -1178,6 +1165,8 @@ species building{
 	int supported_people; //how many people can live in this building
 	string neighbourhood;	
 	bool satellite;
+	int dorm;
+	int luxury;
 	
 	list<float> calculateDistances{
 		list<float> dist_list <- [];
@@ -1210,12 +1199,19 @@ species building{
 		//float rent_acum<-1;
 		//float rent_acum <- 2.6943e03;
 		float rent_acum <- 3.164828564568120e+03;// – 0.157640775056889*dist_T - 0.137361376377043*dist_uni  
-		
 		loop i from: 0 to:length(dist_weights) - 1 {
 			//rent_acum<-rent_acum+1/1000000*distances[i]*dist_weights[i];
 			rent_acum<-rent_acum+distances[i]*dist_weights[i];
 		}
-		float rentPrice<-rent_acum;
+		float rentPrice <- rent_acum / 2; // los calculos son para 2 habitaciones. Buscamos precio por habitacion
+		
+		if (dorm = 1){
+			rentPrice <- rentPrice * 0.75; //reducimos el valor del precio en caso de que sea dorm
+		}
+		if (luxury = 1){
+			rentPrice <- rentPrice * 1.5; //aumentamos el valor del precio en caso de que sea un edif de lujo
+		}
+		
 		return rentPrice;
 	}
 	
@@ -1223,13 +1219,10 @@ species building{
 	float normalise_rent{
 		float maxRentCity;
 		float minRentCity;
-		float meanRentCity;
 		ask myCity{
 			do updateCityParams;
 			maxRentCity<-maxRent;
-			minRentCity<-minRent;
-
-			
+			minRentCity<-minRent;	
 		}
 		float rentPriceNorm_gen;
 		if (maxRentCity!=minRentCity){
@@ -1238,6 +1231,7 @@ species building{
 		else{
 			rentPriceNorm_gen <- 0.0;
 		}
+		
 		return rentPriceNorm_gen;
 	}
 	

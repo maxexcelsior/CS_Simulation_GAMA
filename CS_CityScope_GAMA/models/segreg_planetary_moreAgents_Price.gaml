@@ -1015,7 +1015,7 @@ species people{
 				time_main_activity <- extract_cand_list[4];
 				distance_main_activity <- extract_transport_list[2];
 				mobility_mode_main_activity <- extract_transport_map.keys[0];
-				CommutingCost <- extract_features_list[1];						
+				CommutingCost <- extract_transport_list[1];						
 			}
 		}
 		
