@@ -658,7 +658,7 @@ species people{
 			possibleMobModes<<"car";
 		}
 		if (flip(proba_bike_per_type[type])=true){
-			possibleMobModes<-"bike";
+			possibleMobModes<<"bike";
 		}
 		possibleMobModes<<"bus";
 	}

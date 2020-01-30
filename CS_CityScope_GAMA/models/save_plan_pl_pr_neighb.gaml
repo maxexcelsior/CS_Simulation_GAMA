@@ -9,7 +9,7 @@ model save_plan_pl_pr_neighb
 
 global{
 	int totalSupportedPeople <- 0;
-	int nb_people <- 10000; //param variable
+	int nb_people <- 30000; //param variable
 	int nb_agents <- 10000;
 	int realTotalPeople <- 0;
 	int realTotalAgents <- 0;
@@ -594,7 +594,7 @@ global{
 	
 	action save_info{
 		ask people{
-			save[nb_people, cycle, type, living_place.ID, living_place.location, activity_place.ID, activity_place.location, happyUnitSize, actualUnitSize, actualNeighbourhood, actualCity, happyNeighbourhood, mobility_mode_main_activity, time_main_activity, distance_main_activity, CommutingCost, living_place.rentPriceNorm, living_place.dorm, living_place.luxury, agent_per_point] type:csv to:"../results/results_segreg"+nb_people +".csv" rewrite: false header:true;	
+			save[nb_people, cycle, type, living_place.ID, living_place.location, activity_place.ID, activity_place.location, happyUnitSize, actualUnitSize, actualNeighbourhood, actualCity, happyNeighbourhood, mobility_mode_main_activity, time_main_activity, distance_main_activity, CommutingCost, living_place.rentPriceNorm, living_place.dorm, living_place.luxury, agent_per_point] type:csv to:"../results/results_segreg" +".csv" rewrite: false header:true;	
 		}
 	}
 	
@@ -746,7 +746,7 @@ species people{
 			possibleMobModes<<"car";
 		}
 		if (flip(proba_bike_per_type[type])=true){
-			possibleMobModes<-"bike";
+			possibleMobModes<<"bike";
 		}
 		possibleMobModes<<"bus";
 	}

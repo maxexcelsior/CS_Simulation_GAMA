@@ -75,7 +75,7 @@ global{
 	map<string,map<string,list<float>>> weights_map <- map([]);
 	map<string,float> time_importance_per_type;
 	map<road,float> congestion_map;  
-	list<string> allPossibleMobilityModes<-["walking","car","bike","bus"];
+	list<string> allPossibleMobilityModes<-["walking","car","bike","bus", "T"];
 	map<string,int> nPeople_per_mobility;
 	map<string,map<string,float>> propPeople_per_mobility_type <- map([]);
 	map<string,map<string,float>> peoplePerNeighbourhoodMap <- map([]);
@@ -104,7 +104,7 @@ global{
 	file<geometry>buildings_shapefile<-file<geometry>(cityGISFolder+"/Buildings_Kendall3.shp");
 	file<geometry> roads_shapefile<-file<geometry>(cityGISFolder+"/Roads.shp");
 	file activity_file <- file("./../includes/Game_IT/ActivityPerProfile.csv");
-	file mode_file <- file("./../includes/Game_IT/Modes.csv");
+	file mode_file <- file("./../includes/Game_IT/Modes2.csv");
 	file criteria_file <- file("./../includes/Game_IT/CriteriaFile.csv");
 	file profile_file <- file("./../includes/Game_IT/Profiles.csv");
 	file weather_coeff <- file("../includes/Game_IT/weather_coeff_per_month.csv");
@@ -214,7 +214,6 @@ global{
 				name <- planetary_matrix[0,i];
 				list_neighbourhoods << name;
 				dist <- planetary_matrix[1,i];
-				has_bus <- planetary_matrix[2,i];
 				has_T <- planetary_matrix[3,i];
 				meanRent <- planetary_matrix[4,i];
 				meanRent <- ((meanRent/2) - minRentGlobal) / (maxRentGlobal - minRentGlobal);
@@ -222,13 +221,6 @@ global{
 				location_x <- planetary_matrix[5,i];
 				location_y <- planetary_matrix[6,i];
 				location <- {location_x,location_y};
-				possible_transport <- ["car"];
-				if (has_bus = true){
-					possible_transport << "bus";
-				}
-				if (has_T = true){
-					possible_transport << "T"; 
-				}
 				list_planetary_cities << self;
 				create sat_building{
 					myCity <- list_planetary_cities[i];
@@ -524,6 +516,7 @@ global{
 					distance_main_activity <- extract_list[2];
 					mobility_mode_main_activity<-mobilityAndTime.keys[0];
 					map_all_planets_transport <- calculate_planetary_transport();
+					//write map_all_planets_transport;
 					map_all_planets_features <- calculate_planetary_features();
 					loop i from: 0 to: length(list_planetary_cities) - 1 {
 						list extract_features_list <- map_all_planets_features[map_all_planets_features.keys[i]];
@@ -827,7 +820,15 @@ species people{
 		map<string,map<string,list<float>>> map_planet_transport;
 		map<string,list<float>> each_planet_transport;
 		loop i from: 0 to: length(list_planetary_cities) - 1 {
-			each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place, list_planetary_cities[i].dist);
+			if (list_planetary_cities[i].has_T = true){
+				each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place, list_planetary_cities[i].dist, true);
+				do calculate_possibleMobModes;
+				//write 'sí entra';
+				//write list_planetary_cities[i].name;
+			}
+			else{
+				each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place, list_planetary_cities[i].dist);
+			}
 			add each_planet_transport at:list_planetary_cities[i] to: map_planet_transport;
 		}	
 		return map_planet_transport;	
@@ -846,11 +847,20 @@ species people{
 		return map_planet_feat;
 	}
 	
-	map<string,list<float>> evaluate_main_trip(point origin_location,building destination, float distance_original <- nil){
+	map<string,list<float>> evaluate_main_trip(point origin_location,building destination, float distance_original <- nil, bool isthereT <- false){
 		list<list> candidates;
 		list<float> commuting_cost_list;
 		list<float> distance_list;
-		loop mode over:possibleMobModes{
+		list<string> possibleMobModesNow <- [];
+		possibleMobModesNow <- possibleMobModes;
+		//write 'possibleMobModesNow ' + possibleMobModesNow;
+		//write 'possibleMobModes people '+ possibleMobModes;
+		
+		if (isthereT = true){
+			possibleMobModesNow << "T";
+		}
+		
+		loop mode over:possibleMobModesNow{
 			list<float> characteristic<- charact_per_mobility[mode];
 			list<float> cand;	
 			float distance <- 0.0;		
@@ -900,10 +910,10 @@ species people{
 		int choice <- weighted_means_DM(candidates, criteria_WM);
 		string poss_mobility_mode_main_activity;
 		if (choice>=0){
-			poss_mobility_mode_main_activity <- possibleMobModes[choice];
+			poss_mobility_mode_main_activity <- possibleMobModesNow[choice];
 		}
 		else{
-			poss_mobility_mode_main_activity <- one_of(possibleMobModes);
+			poss_mobility_mode_main_activity <- one_of(possibleMobModesNow);
 		}
 		list<float> choice_vector <- candidates[choice];
 		float commuting_cost <- commuting_cost_list[choice];
@@ -919,7 +929,7 @@ species people{
 			possibleMobModes<<"car";
 		}
 		if (flip(proba_bike_per_type[type])=true){
-			possibleMobModes<-"bike";
+			possibleMobModes<<"bike";
 		}
 		possibleMobModes<<"bus";
 	}
@@ -1127,8 +1137,6 @@ species city{
 species planetary_city parent: city {
 	float dist; //distance to main city
 	bool has_T; //(semi-)direct T from/to Kendall
-	bool has_bus;
-	list<string> possible_transport;
 	float location_x;
 	float location_y;
 	building planetary_building;
@@ -1442,6 +1450,14 @@ experiment visual type:gui{
 					data type_people[i] value: propPeople_per_mobility_type[allPossibleMobilityModes[0]].values[i] color: color_per_type[type_people[i]];
 				}
 			}			
+		}
+		display MobilityChartsT{
+			chart "Proportion of people using T" type: series background: #white position:{0,0.0} size: {1.0,0.5}{
+				data "Mean proportion of people" value: people_per_Mobility_now.values[4] color: #black;
+				loop i from: 0 to:length(type_people) - 1{
+					data type_people[i] value: propPeople_per_mobility_type[allPossibleMobilityModes[4]].values[i] color: color_per_type[type_people[i]];
+				}
+			}
 		}
 		display PeoplePerNeighbourhood{			
 			chart "Proportion of people per neighbourhood [Undergrad]" background:#white type: pie style:ring size: {0.3,0.3} position: {0.0,0.0} color: #black axes: #yellow title_font: 'Helvetica' title_font_size: 12.0 
