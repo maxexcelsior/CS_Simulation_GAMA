@@ -1,9 +1,0 @@
-  ; Price Importance ; Diversity acceptance ; Preferred unit Size ; Unit Size Weight ; Preferred zone ; Pattern weight 
- Undergraduate student ; -1 ; 0.1 ; S ; 0.8 ; Area 2/MIT ; 0.3 
- Graduate student ; -0.95 ; 0.1 ; S ; 0.8 ; Area 2/MIT ; 0.4 
- PhD ; -0.7 ; 0 ; M ; 0.6 ; Area 2/MIT ; 0.4 
- Young Professional ; -0.5 ; -0.3 ; M ; 0.6 ; Wellington-Harrington ; 0.5 
- Mid-career Professional ; -0.4 ; -0.5 ; L ; 0.4 ; East Cambridge ; 0.6 
- Executives ; -0.1 ; -0.9 ; L ; 0.4 ; East Cambridge ; 1 
- Worker ; -0.8 ; -0.2 ; M ; 0.4 ; The Port ; 0.4 
- Retiree ; -0.5 ; -0.9 ; M ; 0.4 ; The Port ; 0.4 

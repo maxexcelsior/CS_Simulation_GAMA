@@ -3,20 +3,24 @@
 * Author: 
 * Description: 
 * Tags: Tag1, Tag2, TagN
+* Se incluye a la segregación completa con T, la aleatoriedad en la creación de perfiles y la variación del precio en función de la demanda
 ***/
 
 model segreg_compl_T_demand
 
 global{
 	int totalSupportedPeople <- 0;
-	int nb_people;
-	int nb_agents <- 10000;
+	int nb_people <- 62250; //for example. Nearly x2 of vacant spaces in Kendall
+	int nb_agents <- 10000; //make sure [nb_agent*max(possible_agents_per_point_list) > nb_people]
 	int realTotalPeople <- 0;
 	int realTotalAgents <- 0;
-	int precio_doble <- 1; //1 si no queremos que se aplique el doble de importancia en el precio
+	int precio_doble <- 1; //placeholder to know where should we modify the code if we want the price to have more importance
 	int make_positive;
 	float minRentGlobal;
 	float maxRentGlobal;
+	float empty_perc <- 0.8;
+	float rent_incr <- 1.05;
+	float rent_decr <- 0.95;
 	map<string,int> possible_unitSizes<-["S"::1,"M"::2,"L"::3];
 	list<int> possible_agents_per_point_list <- [1,10,20,30,40,50,60,70,80,90,100];
 	list<int> actual_agents_per_point_list <- [0,0,0,0,0,0,0,0,0,0,0];
@@ -30,16 +34,16 @@ global{
 	map<string,float> happyNeighbourhood_perProfile;
 	float meanRentPeople;
 	map<string,float> meanRent_perProfile;
+	//not general busStop locations. Shapefile would be necesasary
 	list<point> busStop_locations <- [{416.065842541361,872.4406645256535},{295.6297241536236,1539.974425847902},{117.57324879127151,1366.4780559606388},{844.7128639433781,1152.1258495633292},{1223.250124982041,794.9240374419919},{528.8729859709387,115.20351949292453},{303.3080137033162,61.469988319234204}];
-	int reference_rent <- 1500; //se calculará el commuting cost en porcentaje respecto a este precio de referencia. Cuando tenga precios, será el menor de todos.
-	int days_per_month <- 20; //dias laborales por mes
+	int reference_rent <- 1500; //commuting cost will be calculated as a percentage with respect to this reference price
+	int days_per_month <- 20; //labour days per month
 	list<planetary_city> list_planetary_cities <- [];
 	
 	bool weatherImpact<-false;
 	float weather_of_day min: 0.0 max: 1.0;	
 	
 	list<float> dist_weights;
-	float meanRentnorm<-0.0;	
 	float meanDiversityGlobal<-0.0;
 	int movingPeople<-0;
 	float meanTimeToMainActivity;
@@ -72,6 +76,7 @@ global{
 	map<string,int> nPeople_perProfile;
 	float meanCommutingCostGlobal;
 	map<string,float> meanCommutingCost_perProfile;
+	int NumberofChangingRents;
 	
 
 	list<string> type_people;
@@ -83,9 +88,8 @@ global{
 	map<string,list<string>> pattern_list;
 	map<string,float> patternWeight_list;
 	
-	//file weight_distances_file<-file("./../includes/Game_IT/WeightDistances.csv");
 	file weight_distances_file<-file("./../includes/Game_IT/WeightDistances2.csv");
-	file criteria_home_file <- file("./../includes/Game_IT/CriteriaHome2.csv");
+	file criteria_home_file <- file("./../includes/Game_IT/CriteriaHome3.csv");
 	string case_study<-"volpe";
 	list<string> list_neighbourhoods <- [];
 	string cityGISFolder<-"./../includes/City/"+case_study;
@@ -104,7 +108,7 @@ global{
 		do read_criteriaHome;
 		do createCity;
 		do createBuildings;
-		do countTotalSupportedPeople;
+		//do countTotalSupportedPeople;
 		do createRoads;
 		do createBusStop;
 		do createTStop;
@@ -179,7 +183,7 @@ global{
 		list<float> prices_planetary <- [];
 		loop i from:0 to: planetary_matrix.rows - 1{
 			float prices_planetary_i <- planetary_matrix[4,i] ;
-			prices_planetary_i <- prices_planetary_i / 2; //es por dos habitaciones
+			prices_planetary_i <- prices_planetary_i / 2; //price per bedrrom (we have data for two bedrooms)
 			prices_planetary << (prices_planetary_i - minRentGlobal) / (maxRentGlobal - minRentGlobal);
 		} 
 		int min_price_dorm <- min(building where (each.dorm = 1) collect each.rentPriceNorm) - 1;
@@ -190,10 +194,10 @@ global{
 		make_positive <- - min_price_planetary;
 		ask building where(each.usage="R"){		
 			if (make_positive != -1){
-				rentPriceNorm <- (rentPriceNorm + make_positive)/((make_positive + 1)*precio_doble); //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
+				rentPriceNorm <- (rentPriceNorm + make_positive)/((make_positive + 1)*precio_doble); //prices in some planetary cities are below the minimum price in Kendall. Need to make them positive
 			}	
 			else{
-				rentPriceNorm <- (rentPriceNorm + make_positive) / 2; //entre 1 y 2 los de Kendall. Para que Somerville etc no estén en negativo
+				rentPriceNorm <- (rentPriceNorm + make_positive) / 2;
 			}		
 			
 		}
@@ -205,7 +209,7 @@ global{
 				has_T <- planetary_matrix[3,i];
 				meanRent <- planetary_matrix[4,i];
 				meanRent <- ((meanRent/2) - minRentGlobal) / (maxRentGlobal - minRentGlobal);
-				meanRent <- (meanRent + make_positive)/((make_positive + 1)*precio_doble); //para que no estén en negativo
+				meanRent <- (meanRent + make_positive)/((make_positive + 1)*precio_doble); //avoid negative rents
 				location_x <- planetary_matrix[5,i];
 				location_y <- planetary_matrix[6,i];
 				location <- {location_x,location_y};
@@ -223,7 +227,7 @@ global{
 			}			
 		}
 		ask building where(each.usage = "R"){
-			do changeColorPrice;
+			do changeColorPrice(rentPriceNorm);
 		}
 	}
 	
@@ -263,7 +267,7 @@ global{
 	
 	action createTStop{
 		create T_stop number:1{
-			location <- {956.800386569075,1163.5265618864044,0.0};
+			location <- {956.800386569075,1163.5265618864044,0.0}; //if we want to make it general, necessary to get the shapefiles with the locations
 		}
 	}
 	
@@ -277,7 +281,6 @@ global{
 	action calculateNormRent{
 		ask building where(each.usage="R"){
 			rentPriceNorm<-normalise_rent();
-			//do changeColorPrice;
 		}
 	}
 	
@@ -381,6 +384,7 @@ global{
 		}
 	}
 	
+	//calculation to know how many people is represented by a dot
 	action agent_calc{
 		loop i from: 0 to: length(proportion_per_type) -1 {
 			int itshere <- 0;
@@ -390,7 +394,7 @@ global{
 			
 			loop j from: 0 to: length(possible_agents_per_point_list) - 1 {
 				float diff <- possible_agents_per_point_list[j] - mean_value_point;
-				if (diff > 0){ //que pasa si nunca entra¿?¿? con numeros de gente muuuuuuy grandes
+				if (diff > 0){  //if condition at line 13 is met, at a point we will get diff > 0
 					itshere <- j;
 					break;
 				}
@@ -446,82 +450,99 @@ global{
 	}
 	
 	action createPopulation{
-		loop i from: 0 to: length(type_people) -1 {
-			loop j from: 0 to: length(agent_per_point_type_map[type_people[i]].values) -1 {
-				create people number: agent_per_point_type_map[type_people[i]].values[j]{
-					type <- type_people[i];
-					agent_per_point <- agent_per_point_type_map[type_people[i]].keys[j];
-					priceImportance<-priceImp_list[type];
-					living_place <- one_of(building where (each.usage="R" and each.vacant >= 1*agent_per_point));
-					if (living_place != nil){
-						living_place.vacant<-living_place.vacant - 1*agent_per_point;		
-						priorHouse << living_place;
-						exploredHouse << living_place;
-						actualUnitSize <- living_place.scale;
-					}
-					else{
-						living_place <- one_of(sat_building);
-						actualUnitSize <- unitSize_list[type];
-					}
-					location <- any_location_in(living_place);
-					payingRent <- living_place.rentPriceNorm;
-					actualNeighbourhood <- living_place.neighbourhood;
-					color <- color_per_type[type];
-					unitSizeWeight <- calculate_unitSizeWeight(actualUnitSize);
-					actualPatternWeight <- calculate_patternWeight(actualNeighbourhood);
-					if (living_place.scale = unitSize_list[type]){
-						happyUnitSize<-1;
-					}
-					else{
-						happyUnitSize<-0;
-					}
-					list<string> extract_list <- pattern_list[type];
-					if (living_place.neighbourhood = extract_list[0]){
-						happyNeighbourhood<-1;
-					}
-					else{
-						happyNeighbourhood<-0;
-					}
-					principal_activity<-main_activity_map[type];
-					
-					if (first(principal_activity)="O"){
-						activity_place<-one_of(building where (each.category='O'));
-					}
-					else if(principal_activity="restaurant"){//spelling difference with respect to "R" to have different first letter
-						activity_place<-one_of(building where(each.category="Restaurant"));
-					}
-					else if(principal_activity="A"){
-						activity_place<-one_of(building where(each.category!="R" and each.category!="O"));
-					}
-					else{
-						activity_place<-one_of(building where (each.category=principal_activity));
-					}
-					do calculate_possibleMobModes;
-					map<string,list<float>> mobilityAndTime<- evaluate_main_trip(living_place.location,activity_place);
-					list<float> extract_list <- mobilityAndTime[mobilityAndTime.keys[0]];
-					time_main_activity<-extract_list[0];
-					CommutingCost <- extract_list[1];
-					distance_main_activity <- extract_list[2];
-					mobility_mode_main_activity<-mobilityAndTime.keys[0];
-					map_all_planets_transport <- calculate_planetary_transport();
-					//write map_all_planets_transport;
-					map_all_planets_features <- calculate_planetary_features();
-					loop i from: 0 to: length(list_planetary_cities) - 1 {
-						list extract_features_list <- map_all_planets_features[map_all_planets_features.keys[i]];
-						map<string,list<float>> extract_transport_mode_map <- map_all_planets_transport[map_all_planets_transport.keys[i]];
-						list<float> extract_transport_mode_list <- extract_transport_mode_map[extract_transport_mode_map.keys[0]];
-						float possiblePlanetaryLivingCost <- extract_features_list[0];
-						float possiblePlanetaryCommutingCost <- extract_transport_mode_list[1];
-						float possiblePlanetaryDiversity <- extract_features_list[3];
-						float possiblePlanetaryUnitSizeWeight <- calculate_unitSizeWeight(extract_features_list[1]);
-						float possiblePlanetaryPatternWeight <- calculate_patternWeight(extract_features_list[2]);
-						float possiblePlanetaryTime <- extract_transport_mode_list[0];
-						list<float> possiblePlanetaryCand <- [possiblePlanetaryLivingCost + possiblePlanetaryCommutingCost, possiblePlanetaryDiversity, possiblePlanetaryUnitSizeWeight, possiblePlanetaryPatternWeight, possiblePlanetaryTime];
-						map_planets_move_cand[list_planetary_cities[i]] <- possiblePlanetaryCand;
-					}			
-				}
-			}
+		write agent_per_point_type_map;
+		
+		loop i from: 0 to: length(type_people) - 1 {
+			map<int,int> extract_map <- agent_per_point_type_map[type_people[i]];
+			extract_map >>- 0;
 		}
+		
+		write agent_per_point_type_map;
+		
+		map<string,float> proportion_per_type_now <- proportion_per_type;
+		
+		create people number: nb_agents{
+			type <- proportion_per_type_now.keys[rnd_choice(proportion_per_type.values)];
+			map<int,int> extract_map <- agent_per_point_type_map[type];
+			agent_per_point <- extract_map.keys[0];
+			extract_map[agent_per_point] <- extract_map[agent_per_point] - 1;
+			extract_map >>- 0; //remove from the map the pairs where the value (number of instances) is 0			
+			agent_per_point_type_map[type] <- extract_map;
+			
+			if (empty(extract_map) = true){
+				proportion_per_type_now[] >- type;
+			}
+			
+			priceImportance<-priceImp_list[type];
+			living_place <- one_of(building where (each.usage = "R" and each.vacant >= 1*agent_per_point));
+			if (living_place != nil){
+				living_place.vacant <- living_place.vacant - 1*agent_per_point;		
+				priorHouse << living_place;
+				exploredHouse << living_place;
+				actualUnitSize <- living_place.scale;
+				actualCity <- "Kendall";
+			}
+			else{
+				living_place <- one_of(sat_building);
+				actualUnitSize <- unitSize_list[type];
+				actualCity <- living_place.neighbourhood;
+			}
+			location <- any_location_in(living_place);
+			payingRent <- living_place.rentPriceNorm;
+			actualNeighbourhood <- living_place.neighbourhood;
+			color <- color_per_type[type];
+			unitSizeWeight <- calculate_unitSizeWeight(actualUnitSize);
+			actualPatternWeight <- calculate_patternWeight(actualNeighbourhood);
+			if (living_place.scale = unitSize_list[type]){
+				happyUnitSize<-1;
+			}
+			else{
+				happyUnitSize<-0;
+			}
+			list<string> extract_list <- pattern_list[type];
+			if (living_place.neighbourhood = extract_list[0]){
+				happyNeighbourhood<-1;
+			}
+			else{
+				happyNeighbourhood<-0;
+			}
+			principal_activity<-main_activity_map[type];
+			
+			if (first(principal_activity)="O"){
+				activity_place<-one_of(building where (each.category='O'));
+			}
+			else if(principal_activity="restaurant"){//spelling difference with respect to "R" to have different first letter
+				activity_place<-one_of(building where(each.category="Restaurant"));
+			}
+			else if(principal_activity="A"){
+				activity_place<-one_of(building where(each.category!="R" and each.category!="O"));
+			}
+			else{
+				activity_place<-one_of(building where (each.category=principal_activity));
+			}
+			do calculate_possibleMobModes;
+			map<string,list<float>> mobilityAndTime<- evaluate_main_trip(living_place.location,activity_place);
+			list<float> extract_list <- mobilityAndTime[mobilityAndTime.keys[0]];
+			time_main_activity<-extract_list[0];
+			CommutingCost <- extract_list[1];
+			distance_main_activity <- extract_list[2];
+			mobility_mode_main_activity<-mobilityAndTime.keys[0];
+			map_all_planets_transport <- calculate_planetary_transport();
+			map_all_planets_features <- calculate_planetary_features();
+			loop i from: 0 to: length(list_planetary_cities) - 1 {
+				list extract_features_list <- map_all_planets_features[map_all_planets_features.keys[i]];
+				map<string,list<float>> extract_transport_mode_map <- map_all_planets_transport[map_all_planets_transport.keys[i]];
+				list<float> extract_transport_mode_list <- extract_transport_mode_map[extract_transport_mode_map.keys[0]];
+				float possiblePlanetaryLivingCost <- extract_features_list[0];
+				float possiblePlanetaryCommutingCost <- extract_transport_mode_list[1];
+				float possiblePlanetaryDiversity <- extract_features_list[3];
+				float possiblePlanetaryUnitSizeWeight <- calculate_unitSizeWeight(extract_features_list[1]);
+				float possiblePlanetaryPatternWeight <- calculate_patternWeight(extract_features_list[2]);
+				float possiblePlanetaryTime <- extract_transport_mode_list[0];
+				list<float> possiblePlanetaryCand <- [possiblePlanetaryLivingCost + possiblePlanetaryCommutingCost, possiblePlanetaryDiversity, possiblePlanetaryUnitSizeWeight, possiblePlanetaryPatternWeight, possiblePlanetaryTime];
+				map_planets_move_cand[list_planetary_cities[i]] <- possiblePlanetaryCand;
+			}			
+		}			
 	}
 	
 	action countPopMainCity{
@@ -669,11 +690,15 @@ global{
 		
 	}
 	
-	action countTotalSupportedPeople{		
+	/***action countTotalSupportedPeople{		
 		ask building where(each.usage="R" and each.satellite = false){
 			totalSupportedPeople<-totalSupportedPeople+supported_people;
 		}
-		nb_people <- totalSupportedPeople;
+		//nb_people <- totalSupportedPeople;
+	}***/
+	
+	action countNumberofChangingRents{
+		NumberofChangingRents <- building count(each.changeRent = true);
 	}
 	
 	action activityDataImport{
@@ -691,7 +716,7 @@ global{
 				if(act!=current_activity){
 					activities[act]<-j;
 					current_activity<-act;
-					posts<-posts+1;
+					posts <- posts+1;
 					list_form<<act;
 				}
 			}
@@ -728,6 +753,10 @@ global{
 	
 	reflex peopleMove{
 		movingPeople<-0;
+		NumberofChangingRents <- 0;
+		ask building where(each.changeRent=true){
+			changeRent <- false;
+		}
 		ask people{
 			do changeHouse;
 		}
@@ -745,31 +774,28 @@ global{
 				do updateCommutingCosts;
 			}
 		}
+		
+		ask building where(each.vacant > int(empty_perc*each.supported_people) and each.dorm = 0){
+			rentPriceNorm <- rentPriceNorm*rent_decr;
+			changeRent <- true;
+		}
+		
+		ask building where (each.vacant < int((1-empty_perc)* each.supported_people) and each.dorm = 0){
+			//dorms' prices are not ruled by the market
+			rentPriceNorm <- rentPriceNorm*rent_incr;
+			changeRent <- true;
+		}
+		
+		ask building{
+			do changeColorPrice(rentPriceNorm);
+		}
 		do countRent;
 		do countPopMainCity;
 		do countNeighbourhoods;
 		do countHappyPeople;
 		do countMobility;
+		do countNumberofChangingRents;
 	}
-	
-	/***reflex saveLocations when: cycle=199{
-		ask people{
-			FinalLocation<<living_place.location;
-			typeFinalLocation<<type;
-		}
-	}***/
-	
-	/***reflex count{
-		peopleMovingRecord<<movingPeople;
-		meanDiversityRecord<<meanDiversityGlobal;
-		happyUnitSizePeopleRecord<<happyUnitSizePeople;
-		happyNeighbourhoodPeopleRecord<<happyNeighbourhoodPeople;
-		meanTimeRecord<<meanTimeToMainActivity;
-		meanDistanceRecord << meanDistanceToMainActivity;
-		proportionMobilityRecord<<people_per_Mobility_now;
-		meanRentRecord << meanRentPeople;
-		meanCommutingCostRecord << meanCommutingCostGlobal;
-	}***/
 		
 }
 
@@ -784,6 +810,7 @@ species people{
 	int happyUnitSize;
 	string actualUnitSize;
 	string actualNeighbourhood;
+	string actualCity;
 	float actualPatternWeight;
 	int happyNeighbourhood;
 	string principal_activity;
@@ -810,8 +837,6 @@ species people{
 			if (list_planetary_cities[i].has_T = true){
 				each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place, list_planetary_cities[i].dist, true);
 				do calculate_possibleMobModes;
-				//write 'sí entra';
-				//write list_planetary_cities[i].name;
 			}
 			else{
 				each_planet_transport <- evaluate_main_trip(list_planetary_cities[i].location,activity_place, list_planetary_cities[i].dist);
@@ -840,8 +865,6 @@ species people{
 		list<float> distance_list;
 		list<string> possibleMobModesNow <- [];
 		possibleMobModesNow <- possibleMobModes;
-		//write 'possibleMobModesNow ' + possibleMobModesNow;
-		//write 'possibleMobModes people '+ possibleMobModes;
 		
 		if (isthereT = true){
 			possibleMobModesNow << "T";
@@ -860,7 +883,7 @@ species people{
 				distance <- distance_original;
 			}
 			cand<<characteristic[0] + characteristic[1]*distance;  //length unit meters
-			commuting_cost_list << (characteristic[0] + characteristic[1]*distance/1000)/reference_rent*days_per_month*2; //price with respect to a reference rent (*2 because we have rentPrices [0,2]
+			commuting_cost_list << (characteristic[0] + characteristic[1]*distance/1000)/reference_rent*days_per_month*2; //price with respect to a reference rent (*2 because it is a roundtrip)
 			distance_list << distance;
 			cand<<characteristic[2]#mn + distance/speed_per_mobility[mode];
 			cand<<characteristic[4];
@@ -923,7 +946,6 @@ species people{
 	
 	action changeHouse{
 		building possibleMoveBuilding <- one_of(building where(each.usage="R" and (each.vacant >= 1*agent_per_point and (priorHouse contains each!=true and(exploredHouse contains each!=true and(each!=living_place))))));
-		//building possibleMoveBuilding<-one_of(building where(each.usage="R" and each.vacant>0));
 		list<list> cands <- [];
 		float living_cost <- living_place.rentPriceNorm;
 		float possibleLivingCost;
@@ -944,7 +966,7 @@ species people{
 			possibleUnitSizeWeight <- calculate_unitSizeWeight(possibleUnitSize);
 			possibleNeighbourhood <- possibleMoveBuilding.neighbourhood;
 			possiblePatternWeight <- calculate_patternWeight(possibleNeighbourhood);
-			map<string,list<float>> possibleTimeAndMob <- evaluate_main_trip(possibleMoveBuilding.location,activity_place); //list<float> es time y commuting_cost respecto a reference_rent
+			map<string,list<float>> possibleTimeAndMob <- evaluate_main_trip(possibleMoveBuilding.location,activity_place); //list<float> is time and commuting_cost with respect to a reference_rent
 			list<float> possible_extract_list <- possibleTimeAndMob[possibleTimeAndMob.keys[0]];
 			possibleTime <- possible_extract_list[0];
 			possibleCommutingCost <- possible_extract_list[1];
@@ -952,7 +974,8 @@ species people{
 			possibleDistance <- possible_extract_list[2];
 			cands <- [[possibleLivingCost+possibleCommutingCost,possibleDiversity,possibleUnitSizeWeight,possiblePatternWeight, possibleTime],[living_cost + CommutingCost,living_place.diversityNorm,unitSizeWeight,actualPatternWeight, time_main_activity]];
 		}
-		else{
+		else{ 
+			//-#infinity  is a placeholder so that if there is no building that meets the requirements to move there, choice = 1 is never possible
 			cands <- [[-#infinity,-#infinity,-#infinity,-#infinity,-#infinity],[living_cost + CommutingCost,living_place.diversityNorm,unitSizeWeight,actualPatternWeight, time_main_activity]];
 		}
 		
@@ -988,6 +1011,7 @@ species people{
 			actualUnitSize<-living_place.scale;
 			actualPatternWeight <- possiblePatternWeight;
 			actualNeighbourhood <- living_place.neighbourhood;
+			actualCity <- "Kendall";
 			time_main_activity <- possibleTime;
 			distance_main_activity <- possibleDistance;
 			mobility_mode_main_activity<-possibleMobility;
@@ -999,7 +1023,7 @@ species people{
 				living_place.vacant<-living_place.vacant + 1*agent_per_point;
 				building nolonger_living_place <- living_place;
 				living_place <- list_planetary_cities[choice - 2].planetary_building;
-				happyUnitSize <- 1; //suponemos que en planetary_city siempre son capaces de encontrar el unitSize que quieren
+				happyUnitSize <- 1; //hypothesis: in planetary city they are always able to find the preferred UnitSize
 				location <- any_location_in(living_place);
 				ask nolonger_living_place{
 					if(satellite = false){
@@ -1015,6 +1039,7 @@ species people{
 				actualUnitSize <- extract_features_list[1];
 				actualPatternWeight <- extract_cand_list[3];
 				actualNeighbourhood <- extract_features_list[2];
+				actualCity <- living_place.neighbourhood;
 				time_main_activity <- extract_cand_list[4];
 				distance_main_activity <- extract_transport_list[2];
 				mobility_mode_main_activity <- extract_transport_map.keys[0];
@@ -1086,13 +1111,11 @@ species city{
 	float meanCommutingCost;
 	
 	action updateCityParams{
-		maxRent<- max(building where (each.usage="R" and each.myCity = self and each.dorm = 0 and each.luxury = 0) collect each.rentPriceabs);
+		maxRent <- max(building where (each.usage="R" and each.myCity = self and each.dorm = 0 and each.luxury = 0) collect each.rentPriceabs);
 		minRent <- min(building where (each.usage="R" and each.myCity = self and each.dorm = 0 and each.luxury = 0) collect each.rentPriceabs);
 		minRentGlobal <- minRent;
 		maxRentGlobal <- maxRent;
 		meanRent<- mean(building where (each.usage="R" and each.myCity = self) collect each.rentPriceabs);
-	
-		meanRentnorm<-(meanRent-minRent)/(maxRent-minRent);
 		
 		maxdiver<-max(building where (each.usage = "R" and each.myCity = self) collect each.diversity);
 		mindiver<-min(building where (each.usage = "R" and each.myCity = self) collect each.diversity);
@@ -1100,8 +1123,8 @@ species city{
 	}
 	
 	action updateMeanDiver{
-		meandiver<-mean(building where(each.usage="R" and each.vacant!=each.supported_people and each.myCity = self) collect each.diversityNorm);
-		meanDiversityGlobal<-meandiver;
+		meandiver <- mean(building where(each.usage="R" and each.vacant!=each.supported_people and each.myCity = self) collect each.diversityNorm);
+		meanDiversityGlobal <- meandiver;
 	}
 	
 	action updateCommutingCosts{
@@ -1157,6 +1180,7 @@ species building{
 	bool satellite;
 	int dorm;
 	int luxury;
+	bool changeRent <- false;
 	
 	list<float> calculateDistances{
 		list<float> dist_list <- [];
@@ -1186,20 +1210,19 @@ species building{
 	}
 	
 	float calculateRent{
-		//float rent_acum<-1;
-		//float rent_acum <- 2.6943e03;
+		//specific for Great Boston area. Needs to be modified for other cities
 		float rent_acum <- 3.164828564568120e+03;// – 0.157640775056889*dist_T - 0.137361376377043*dist_uni  
 		loop i from: 0 to:length(dist_weights) - 1 {
 			//rent_acum<-rent_acum+1/1000000*distances[i]*dist_weights[i];
 			rent_acum<-rent_acum+distances[i]*dist_weights[i];
 		}
-		float rentPrice <- rent_acum / 2; // los calculos son para 2 habitaciones. Buscamos precio por habitacion
+		float rentPrice <- rent_acum / 2; //price for 2 bedroom data. We want to calculate price per bedroom
 		
 		if (dorm = 1){
-			rentPrice <- rentPrice * 0.75; //reducimos el valor del precio en caso de que sea dorm
+			rentPrice <- rentPrice * 0.75; //if dorm, 25% cheaper than normal accommodation (where price has been calculated considering distance to T and Uni)
 		}
 		if (luxury = 1){
-			rentPrice <- rentPrice * 1.5; //aumentamos el valor del precio en caso de que sea un edif de lujo
+			rentPrice <- rentPrice * 1.5; //if luxury, 50% more expensive than normal
 		}
 		
 		return rentPrice;
@@ -1237,7 +1260,6 @@ species building{
 			list<float> proportion_each <- [];
 			
 			loop i from: 0 to: length(type_people)-1 {
-				//number_each << people count (each.living_place=self and each.type=type_people[i]);
 				int number_each_indiv <- 0;
 				ask people where(each.living_place = self and each.type = type_people[i]){
 					number_each_indiv <- number_each_indiv + agent_per_point;
@@ -1270,10 +1292,9 @@ species building{
 		}
 	}
 	
-	action changeColorPrice{
+	action changeColorPrice(float normalised_rent){
 		if (usage="R"){
 			float colorPriceValue<-255*(rentPriceNorm*(make_positive + 1)*precio_doble-make_positive);
-			//float colorPriceValue<-255*(rentPriceNorm-make_positive);
 			colorPrice<-rgb(max([0,colorPriceValue]),min([255,255-colorPriceValue]),0,125);
 		}
 		
@@ -1313,7 +1334,6 @@ species bus_stop{
 }
 
 species T_stop{
-	building located_building;
 	aspect default{
 		draw square(10#px) color:#white;
 	}
@@ -1375,13 +1395,16 @@ experiment visual type:gui{
 		}
 		
 		display RentCommutingCosts{
-			chart "Mean rent" type:series background: #white position:{0,0} size:{1.0, 0.5}{
+			chart "Mean rent" type:series background: #white position:{0,0} size:{1.0, 0.3}{
 				data "Mean normalised rent in myCity" value: meanRentPeople color: #black;
 				loop i from: 0 to: length(type_people) -1 {
 					data type_people[i] value: meanRent_perProfile[type_people[i]] color: color_per_type[type_people[i]];
 				}
  			}
-			chart "Mean CommutingCost" type:series background: #white position:{0,0.5} size:{1.0,0.5}{
+			chart "Number of buildings changing rents" type:series background: #white position:{0,0.3} size:{1.0,0.3}{
+				data "Number of buildings increasing rent because of demand" value: NumberofChangingRents color: #black;
+			}
+			chart "Mean CommutingCost" type:series background: #white position:{0,0.6} size:{1.0,0.3}{
 				data "Mean CommutingCost" value: meanCommutingCostGlobal color: #black;
 				loop i from: 0 to: length(type_people) - 1 {
 					data type_people[i] value: meanCommutingCost_perProfile[type_people[i]] color: color_per_type[type_people[i]];
@@ -1522,25 +1545,4 @@ experiment visual type:gui{
 			
 			
 }
-
-
-/***experiment exploration type: batch keep_seed: true until:(cycle>200){
-	
-	//parameter "Undergraduate student" var:_undergrad min:0.0 max:1.0 step:0.1;
-	//parameter "Graduate student" var: divacc_grad min:0.0 max: 1.0 step:0.1;
-	//parameter "PhD student" var: divacc_PhD min:0.0 max:1.0 step:0.1;
-	//parameter "Young Professional" var: divacc_youngProf min: 0.0 max:1.0 step:0.1;
-	//parameter "Mid-career worker" var:divacc_midCareer min:0.0 max:1.0 step:0.1;
-	//parameter "Executives" var:divacc_exec min:0.0 max:1.0 step:0.1;
-	//parameter "Worker" var: divacc_worker min:0.0 max: 1.0 step:0.1;
-	//parameter "Retiree" var: divacc_retiree min: 0.0 max: 1.0 step:0.1;
-		
-	int num<-0;	
-	reflex save_results_explo{
-		save[int(self), divacc_list, peopleMovingRecord, meanDiversityRecord] type:csv to:"../results/results"+ num +".csv" rewrite: true header:true;
-		save[int(self), FinalLocation, typeFinalLocation] to:"../results/FinalLocation" + num +".csv" type:"csv" rewrite:true header:true;		
-		num<-num+1;
-	}
-}***/
-
 
